@@ -27,15 +27,25 @@ services:
       - key: EMAIL_BACKEND
         value: django.core.mail.backends.smtp.EmailBackend
       - key: EMAIL_HOST
-        sync: false
+        value: smtp-relay.brevo.com
       - key: EMAIL_PORT
-        sync: false
+        value: 587
       - key: EMAIL_HOST_USER
         sync: false
       - key: EMAIL_HOST_PASSWORD
         sync: false
       - key: EMAIL_USE_TLS
         value: true
+      - key: EMAIL_TIMEOUT
+        value: 20
+      # false so a failed send is logged and reported to the user instead of
+      # silently leaving an account that can never be verified.
+      - key: EMAIL_FAIL_SILENTLY
+        value: false
+      # Demo escape hatch; leave false unless SMTP is unavailable.
+      - key: DEMO_AUTO_VERIFY
+        value: false
+      # Must be verified as a sender in Brevo.
       - key: DEFAULT_FROM_EMAIL
         sync: false
       - key: OPENAI_API_KEY

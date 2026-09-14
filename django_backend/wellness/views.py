@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from django.conf import settings
@@ -32,6 +33,8 @@ from .services import (
     get_user_logs,
     serialize_user,
 )
+
+logger = logging.getLogger(__name__)
 
 AUTH_SALT = "mindguard-auth"
 REFRESH_SALT = "mindguard-refresh"
@@ -117,6 +120,26 @@ def _resolve_actor(request, explicit_user_id=None, require_auth=False):
     return None, None, None
 
 
+def _send_account_email(subject, message, recipient):
+    """Sends transactional mail and reports whether it actually left.
+
+    Returns (sent, error). Callers use this to tell the user something
+    actionable instead of leaving them with an account they cannot verify.
+    """
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[recipient],
+            fail_silently=settings.EMAIL_FAIL_SILENTLY,
+        )
+        return True, None
+    except Exception as error:  # noqa: BLE001 - surfaced to the caller below
+        logger.exception("Failed to send %r to %s", subject, recipient)
+        return False, str(error)
+
+
 def _build_named_user(validated_data):
     first_name = validated_data["firstName"].strip()
     last_name = validated_data["lastName"].strip()
@@ -154,25 +177,45 @@ def register_view(request):
         email=email,
         **_build_named_user(serializer.validated_data),
         password_hash=make_password(serializer.validated_data["password"]),
+        is_verified=settings.DEMO_AUTO_VERIFY,
     )
     token = _create_signed_token({"uid": str(user.external_id)}, VERIFY_SALT)
     verification_url = f"{settings.FRONTEND_URL.rstrip('/')}/verify-email?token={token}"
 
-    send_mail(
-        subject="Verify your MindGuard account",
-        message=(
+    if settings.DEMO_AUTO_VERIFY:
+        return Response(
+            {
+                "message": "Account created and ready to use. You can log in now.",
+                "autoVerified": True,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    sent, error = _send_account_email(
+        "Verify your MindGuard account",
+        (
             "Welcome to MindGuard.\n\n"
             f"Verify your account here: {verification_url}\n\n"
             "If you did not request this account, you can ignore this email."
         ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=True,
+        user.email,
     )
 
     payload = {"message": "Account created. Check your email for the verification link."}
     if settings.DEBUG:
         payload["verificationUrl"] = verification_url
+
+    if not sent:
+        # The account exists but is unreachable by email. Say so plainly rather
+        # than reporting success and leaving the user unable to ever log in.
+        payload["message"] = (
+            "Account created, but the verification email could not be sent. "
+            "Contact support to activate it."
+        )
+        payload["emailDelivered"] = False
+        if settings.DEBUG:
+            payload["emailError"] = error
+
     return Response(payload, status=status.HTTP_201_CREATED)
 
 
@@ -245,16 +288,14 @@ def password_reset_request_view(request):
     if user:
         token = _create_signed_token({"uid": str(user.external_id)}, RESET_SALT)
         reset_url = f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={token}"
-        send_mail(
-            subject="Reset your MindGuard password",
-            message=(
+        _send_account_email(
+            "Reset your MindGuard password",
+            (
                 "A password reset was requested for your MindGuard account.\n\n"
                 f"Reset it here: {reset_url}\n\n"
                 "If you did not request this change, you can ignore this email."
             ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=True,
+            user.email,
         )
         if settings.DEBUG:
             payload["resetUrl"] = reset_url

@@ -133,16 +133,35 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
+# --- Outbound email -------------------------------------------------------
+# Defaults target Brevo (formerly Sendinblue) SMTP relay. Only the host/port
+# are defaulted here; credentials must come from the environment.
+#
+# Brevo gotcha: EMAIL_HOST_USER is the SMTP *login* from the Brevo dashboard
+# (SMTP & API -> SMTP), which looks like "9a1b2c001@smtp-brevo.com". It is not
+# your Brevo account email, and it is not the API key. EMAIL_HOST_PASSWORD is
+# the "xsmtpsib-..." key.
 EMAIL_BACKEND = env_str(
     "EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend",
 )
-EMAIL_HOST = env_str("EMAIL_HOST", "")
+EMAIL_HOST = env_str("EMAIL_HOST", "smtp-relay.brevo.com")
 EMAIL_PORT = env_int("EMAIL_PORT", 587)
 EMAIL_HOST_USER = env_str("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = env_str("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+EMAIL_TIMEOUT = env_int("EMAIL_TIMEOUT", 20)
 DEFAULT_FROM_EMAIL = env_str("DEFAULT_FROM_EMAIL", "mindguard@localhost")
+
+# Swallowing send errors hid a permanently-unverifiable signup: the mail failed,
+# nothing was logged, and the account could never log in. Failures are now
+# raised into the view, which logs them and reports a usable status instead.
+EMAIL_FAIL_SILENTLY = env_bool("EMAIL_FAIL_SILENTLY", False)
+
+# Demo escape hatch: mark new accounts verified on creation so a deployment
+# without working SMTP can still be signed into. Never enable in production —
+# it lets anyone register against an address they do not control.
+DEMO_AUTO_VERIFY = env_bool("DEMO_AUTO_VERIFY", False)
 
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [

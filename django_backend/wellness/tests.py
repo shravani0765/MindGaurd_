@@ -1,3 +1,7 @@
+from smtplib import SMTPAuthenticationError
+from unittest import mock
+
+from django.core import mail
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
@@ -582,3 +586,95 @@ class InteractionValidationTests(TestCase):
         # Neutral, low-confidence entries should keep the score in the "Low" band.
         self.assertLess(after, 45)
         self.assertLessEqual(abs(after - baseline), 25)
+
+
+@override_settings(FRONTEND_URL="http://127.0.0.1:5173", OPENAI_API_KEY="")
+class AccountEmailDeliveryTests(TestCase):
+    """The signup flow must never leave an account that can't be activated."""
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def _payload(self, email="mailer@example.com"):
+        return {
+            "firstName": "Mail",
+            "lastName": "Tester",
+            "email": email,
+            "password": "strongpass123",
+            "passwordConfirm": "strongpass123",
+            "agreeToTerms": True,
+        }
+
+    @override_settings(DEBUG=False, DEMO_AUTO_VERIFY=True)
+    def test_demo_auto_verify_allows_immediate_login(self):
+        response = self.client.post("/api/auth/register", self._payload(), format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.json()["autoVerified"])
+        self.assertTrue(MindGuardUser.objects.get(email="mailer@example.com").is_verified)
+
+        login = self.client.post(
+            "/api/auth/login",
+            {"email": "mailer@example.com", "password": "strongpass123"},
+            format="json",
+        )
+        self.assertEqual(login.status_code, 200)
+        self.assertIn("authToken", login.json())
+
+    @override_settings(DEBUG=False, DEMO_AUTO_VERIFY=False)
+    def test_demo_auto_verify_off_still_requires_verification(self):
+        self.client.post("/api/auth/register", self._payload(), format="json")
+        self.assertFalse(MindGuardUser.objects.get(email="mailer@example.com").is_verified)
+
+        login = self.client.post(
+            "/api/auth/login",
+            {"email": "mailer@example.com", "password": "strongpass123"},
+            format="json",
+        )
+        self.assertEqual(login.status_code, 403)
+
+    @override_settings(DEBUG=False, DEMO_AUTO_VERIFY=False)
+    @mock.patch("wellness.views.send_mail", side_effect=SMTPAuthenticationError(535, b"Authentication failed"))
+    def test_failed_verification_email_is_reported_not_swallowed(self, mocked_send):
+        response = self.client.post("/api/auth/register", self._payload(), format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(mocked_send.called)
+        body = response.json()
+        # The user must be told delivery failed rather than being sent to an
+        # inbox that will never receive anything.
+        self.assertIs(body["emailDelivered"], False)
+        self.assertIn("could not be sent", body["message"])
+        # With DEBUG off, the raw SMTP error must not leak to the client.
+        self.assertNotIn("emailError", body)
+
+    @override_settings(DEBUG=True, DEMO_AUTO_VERIFY=False)
+    @mock.patch("wellness.views.send_mail", side_effect=SMTPAuthenticationError(535, b"Authentication failed"))
+    def test_debug_mode_exposes_the_smtp_error_for_diagnosis(self, _mocked_send):
+        response = self.client.post("/api/auth/register", self._payload(), format="json")
+        self.assertIn("emailError", response.json())
+
+    @override_settings(DEBUG=False, DEMO_AUTO_VERIFY=False)
+    @mock.patch("wellness.views.send_mail", side_effect=SMTPAuthenticationError(535, b"nope"))
+    def test_password_reset_still_does_not_leak_account_existence_when_mail_fails(self, _mocked_send):
+        self.client.post("/api/auth/register", self._payload(), format="json")
+        response = self.client.post(
+            "/api/auth/password-reset/request",
+            {"email": "mailer@example.com"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["message"], "If that email exists, a reset link has been sent.")
+
+    @override_settings(
+        DEBUG=False,
+        DEMO_AUTO_VERIFY=False,
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    )
+    def test_successful_send_reports_no_delivery_problem(self):
+        mail.outbox.clear()
+        response = self.client.post("/api/auth/register", self._payload(), format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertNotIn("emailDelivered", response.json())
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("/verify-email?token=", mail.outbox[0].body)
