@@ -3,7 +3,6 @@ from datetime import timedelta
 from functools import lru_cache
 import json
 import re
-import zlib
 
 from django.conf import settings
 from django.utils import timezone
@@ -110,44 +109,229 @@ def analyze_text(text):
     return _merge_heuristic_and_llm(heuristic, llm_result)
 
 
-def analyze_audio(audio_base64):
-    return analyze_binary_payload(audio_base64, "voice")
+def analyze_audio(audio_base64="", transcript="", voice_features=None):
+    """Infer emotion from a voice check-in.
+
+    The transcript is by far the highest-signal channel available, so when the
+    client has one it is routed through the same LLM-backed text pipeline the
+    journal uses, then adjusted by any acoustic measurements. Raw base64 on its
+    own carries no emotional information, so it is reported as unscored rather
+    than dressed up as a prediction.
+    """
+    voice_features = _coerce_features(voice_features, VOICE_FEATURE_KEYS)
+    transcript = (transcript or "").strip()
+
+    if transcript:
+        analysis = analyze_text(transcript)
+        return _apply_acoustic_adjustment(analysis, voice_features)
+
+    if voice_features:
+        return _analyze_acoustic_only(voice_features)
+
+    return _unscored_analysis("voice", bool(audio_base64))
 
 
-def analyze_video(video_base64):
-    return analyze_binary_payload(video_base64, "video")
+def analyze_video(video_base64="", facial_signals=None):
+    """Infer emotion from a video check-in.
+
+    The browser already runs frame analysis (luminance/edge signatures for brow
+    tension, mouth shape, and fatigue) before uploading, so the server scores
+    those measurements instead of re-deriving them from an encoded frame.
+    """
+    facial_signals = _coerce_features(facial_signals, FACIAL_SIGNAL_KEYS)
+
+    if facial_signals:
+        return _analyze_facial_signals(facial_signals)
+
+    return _unscored_analysis("video", bool(video_base64))
 
 
-def analyze_binary_payload(payload, mode):
-    checksum = zlib.crc32(payload.encode("utf-8"))
-    payload_length = len(payload)
-    symbol_ratio = (payload.count("+") + payload.count("/")) / max(payload_length, 1)
-    diversity = len(set(payload)) / max(payload_length, 1)
+VOICE_FEATURE_KEYS = ("pitchVariance", "energy", "speechRate", "pauseRatio", "jitter")
+FACIAL_SIGNAL_KEYS = ("emotion", "tension", "fatigue", "valence", "confidence")
 
-    if payload_length > 120000 or symbol_ratio > 0.035:
-        emotion = "stressed"
-    elif payload_length > 80000:
-        emotion = "fatigued"
-    elif diversity < 0.018:
-        emotion = "calm"
-    elif checksum % 5 == 0:
-        emotion = "happy"
-    else:
-        emotion = "neutral"
 
-    confidence = _clamp(0.66 + min(payload_length / 220000, 0.16) + min(symbol_ratio, 0.08), 0.66, 0.9)
-    details = {
+def _coerce_features(payload, allowed_keys):
+    """Keeps only known keys and drops anything non-numeric (besides `emotion`)."""
+    if not isinstance(payload, dict):
+        return {}
+
+    cleaned = {}
+    for key in allowed_keys:
+        if key not in payload:
+            continue
+        value = payload[key]
+        if key == "emotion":
+            lowered = str(value or "").strip().lower()
+            if lowered in VALID_EMOTIONS:
+                cleaned[key] = lowered
+            continue
+        try:
+            cleaned[key] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return cleaned
+
+
+def _analyze_facial_signals(signals):
+    """Scores client-side facial measurements into an emotion and confidence."""
+    tension = _clamp(signals.get("tension", 20.0), 0.0, 100.0)
+    fatigue = _clamp(signals.get("fatigue", 20.0), 0.0, 100.0)
+    valence = _clamp(signals.get("valence", 60.0), 0.0, 100.0)
+    reported = signals.get("emotion")
+
+    scores = {emotion: 0.0 for emotion in EMOTION_SCORES}
+    # The client's own classification is a strong prior, not the final answer —
+    # the continuous measurements below can still override it.
+    if reported:
+        scores[reported] += 1.6
+
+    scores["stressed"] += (tension / 100) * 2.4
+    scores["fatigued"] += (fatigue / 100) * 2.4
+    scores["happy"] += (valence / 100) * 1.8
+    scores["sad"] += ((100 - valence) / 100) * 1.6
+    scores["calm"] += ((100 - tension) / 100) * 1.2
+    scores["neutral"] += 0.7
+
+    ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    emotion = ranked[0][0]
+
+    # Confidence rises with separation between the top two candidates, and is
+    # capped below the text path because vision alone is the weaker signal.
+    separation = ranked[0][1] - ranked[1][1]
+    reported_confidence = signals.get("confidence")
+    confidence = _clamp(0.6 + separation / 5, 0.6, 0.9)
+    if reported_confidence is not None:
+        confidence = _clamp((confidence + _clamp(reported_confidence, 0.0, 1.0)) / 2, 0.6, 0.9)
+
+    topic_flags = {flag: False for flag in TOPIC_FLAGS}
+    topic_flags["sleepDepletion"] = fatigue >= 60
+
+    return {
+        "emotion": emotion,
         "confidence": round(confidence, 2),
-        "summary": f"Estimated {emotion} state from {mode} sample.",
-        "suggestion": suggested_action(emotion, {}, "normal"),
-        "topicFlags": {},
-        "urgency": "normal",
-        "confidenceBand": "high" if confidence >= 0.84 else "medium" if confidence >= 0.7 else "low",
-        "supportStyle": _pick_support_style(emotion, {}),
-        "analysisEngine": "signal-heuristic-v1",
-        "analysisModel": f"{mode}-payload-signals",
+        "details": {
+            "confidence": round(confidence, 2),
+            "summary": (
+                f"Facial signals suggest {emotion} "
+                f"(tension {round(tension)}%, fatigue {round(fatigue)}%, valence {round(valence)}%)."
+            ),
+            "suggestion": suggested_action(emotion, topic_flags, "normal"),
+            "topicFlags": topic_flags,
+            "urgency": "normal",
+            "confidenceBand": "high" if confidence >= 0.84 else "medium" if confidence >= 0.7 else "low",
+            "supportStyle": _pick_support_style(emotion, topic_flags),
+            "analysisEngine": "facial-signal-fusion-v1",
+            "analysisModel": "client-frame-analyzer",
+            "signals": {"tension": round(tension), "fatigue": round(fatigue), "valence": round(valence)},
+        },
     }
-    return {"emotion": emotion, "confidence": round(confidence, 2), "details": details}
+
+
+def _analyze_acoustic_only(features):
+    """Fallback scoring when a voice clip arrives without any transcript."""
+    energy = _clamp(features.get("energy", 50.0), 0.0, 100.0)
+    speech_rate = _clamp(features.get("speechRate", 50.0), 0.0, 100.0)
+    pause_ratio = _clamp(features.get("pauseRatio", 30.0), 0.0, 100.0)
+    pitch_variance = _clamp(features.get("pitchVariance", 40.0), 0.0, 100.0)
+
+    scores = {emotion: 0.0 for emotion in EMOTION_SCORES}
+    scores["neutral"] += 0.8
+    # Fast, loud, pitch-variable speech reads as activation; the reverse as depletion.
+    scores["anxious"] += (speech_rate / 100) * 1.4 + (pitch_variance / 100) * 1.2
+    scores["stressed"] += (energy / 100) * 1.3 + (speech_rate / 100) * 0.9
+    scores["fatigued"] += ((100 - energy) / 100) * 1.5 + (pause_ratio / 100) * 1.1
+    scores["sad"] += ((100 - pitch_variance) / 100) * 1.0 + (pause_ratio / 100) * 0.8
+    scores["calm"] += ((100 - speech_rate) / 100) * 0.9 + ((100 - pitch_variance) / 100) * 0.6
+
+    ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    emotion = ranked[0][0]
+    # Prosody without words is genuinely ambiguous — never claim more than 0.78.
+    confidence = _clamp(0.58 + (ranked[0][1] - ranked[1][1]) / 5, 0.58, 0.78)
+    topic_flags = {flag: False for flag in TOPIC_FLAGS}
+
+    return {
+        "emotion": emotion,
+        "confidence": round(confidence, 2),
+        "details": {
+            "confidence": round(confidence, 2),
+            "summary": f"Vocal prosody suggests {emotion}. No transcript was available to confirm it.",
+            "suggestion": suggested_action(emotion, topic_flags, "normal"),
+            "topicFlags": topic_flags,
+            "urgency": "normal",
+            "confidenceBand": "low",
+            "supportStyle": _pick_support_style(emotion, topic_flags),
+            "analysisEngine": "acoustic-prosody-v1",
+            "analysisModel": "client-voice-features",
+        },
+    }
+
+
+def _apply_acoustic_adjustment(analysis, features):
+    """Nudges a transcript-derived result using prosody, without overriding it.
+
+    Words carry the meaning; tone only tells us how hard it is landing. So this
+    can raise or lower confidence and flag fatigue, but never changes the
+    emotion label the text pipeline chose.
+    """
+    if not features:
+        return analysis
+
+    details = dict(analysis.get("details", {}))
+    confidence = float(analysis.get("confidence", 0.74))
+
+    energy = features.get("energy")
+    speech_rate = features.get("speechRate")
+
+    agreement = 0.0
+    if energy is not None:
+        if analysis["emotion"] == "fatigued" and energy < 35:
+            agreement += 0.05
+        elif analysis["emotion"] in {"happy", "calm"} and energy > 60:
+            agreement += 0.04
+        elif analysis["emotion"] == "fatigued" and energy > 70:
+            agreement -= 0.05
+    if speech_rate is not None and analysis["emotion"] in {"anxious", "stressed"} and speech_rate > 65:
+        agreement += 0.05
+
+    confidence = _clamp(confidence + agreement, 0.55, 0.99)
+    details["confidence"] = round(confidence, 2)
+    details["confidenceBand"] = "high" if confidence >= 0.84 else "medium" if confidence >= 0.7 else "low"
+    details["analysisEngine"] = f"{details.get('analysisEngine', 'heuristic-v2')}+prosody"
+    details["signals"] = {key: round(value, 2) for key, value in features.items() if isinstance(value, float)}
+
+    return {"emotion": analysis["emotion"], "confidence": round(confidence, 2), "details": details}
+
+
+def _unscored_analysis(mode, had_payload):
+    """Records the check-in without inventing an emotion.
+
+    Guessing from an opaque payload produced numbers that looked like inference
+    but were not, which then polluted the burnout average. Logging `neutral` at
+    an explicitly low confidence keeps the entry without corrupting the trend.
+    """
+    reason = (
+        f"A {mode} sample arrived with no transcript or measured signals, so no emotion was inferred."
+        if had_payload
+        else f"No usable {mode} data was received."
+    )
+    topic_flags = {flag: False for flag in TOPIC_FLAGS}
+
+    return {
+        "emotion": "neutral",
+        "confidence": 0.3,
+        "details": {
+            "confidence": 0.3,
+            "summary": reason,
+            "suggestion": "Add a short written or spoken note so MindGuard has something real to work with.",
+            "topicFlags": topic_flags,
+            "urgency": "normal",
+            "confidenceBand": "low",
+            "supportStyle": "reflection",
+            "analysisEngine": "unscored",
+            "analysisModel": "none",
+            "unscored": True,
+        },
+    }
 
 
 def create_mood_log(user_id, source_mode, analysis, user=None):

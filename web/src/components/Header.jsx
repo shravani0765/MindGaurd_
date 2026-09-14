@@ -14,6 +14,7 @@ import {
   Trees,
   Compass,
   LogOut,
+  AudioLines,
 } from 'lucide-react';
 import { ambianceEngine } from '../services/audioAmbiance';
 
@@ -22,6 +23,7 @@ export default function Header({
   burnoutScore = 24,
   userName = 'You',
   onLogout,
+  onOpenVoiceStudio,
   autoInterventionActive: _autoInterventionActive = false,
 }) {
   const [activeTrack, setActiveTrack] = useState(null);
@@ -146,6 +148,16 @@ export default function Header({
             )}
           </div>
         )}
+
+        <button
+          type="button"
+          onClick={onOpenVoiceStudio}
+          className="btn-ghost app-header__voice"
+          title="Change the companion voice and tone"
+        >
+          <AudioLines size={14} />
+          <span>Voice</span>
+        </button>
 
         <button type="button" onClick={onOpenDashboard} className="btn-primary app-header__cta">
           <Sparkles size={14} />

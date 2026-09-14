@@ -18,7 +18,10 @@ from .serializers import (
     NotificationSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
+    TextInteractionSerializer,
     TokenRegistrationSerializer,
+    VideoInteractionSerializer,
+    VoiceInteractionSerializer,
 )
 from .services import (
     analyze_audio,
@@ -295,52 +298,56 @@ def _interaction_response(user_id, source_mode, analysis, user=None):
 
 @api_view(["POST"])
 def text_interaction_view(request):
-    user_id, user, auth_error = _resolve_actor(request, request.data.get("userId"), require_auth=True)
+    serializer = TextInteractionSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    user_id, user, auth_error = _resolve_actor(
+        request, serializer.validated_data.get("userId"), require_auth=True
+    )
     if auth_error:
         return auth_error
 
-    text = request.data.get("text", "")
-    if not text:
-        return Response(
-            {"message": "text required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    mood_log, snapshot = _interaction_response(user_id, "text", analyze_text(text), user=user)
+    analysis = analyze_text(serializer.validated_data["text"])
+    mood_log, snapshot = _interaction_response(user_id, "text", analysis, user=user)
     return Response({"message": "Text processed", "moodLog": MoodLogSerializer(mood_log).data, "burnoutRisk": snapshot})
 
 
 @api_view(["POST"])
 def voice_interaction_view(request):
-    user_id, user, auth_error = _resolve_actor(request, request.data.get("userId"), require_auth=True)
+    serializer = VoiceInteractionSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    user_id, user, auth_error = _resolve_actor(
+        request, serializer.validated_data.get("userId"), require_auth=True
+    )
     if auth_error:
         return auth_error
 
-    audio_base64 = request.data.get("audioBase64")
-    if not audio_base64:
-        return Response(
-            {"message": "audioBase64 required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    mood_log, snapshot = _interaction_response(user_id, "voice", analyze_audio(audio_base64), user=user)
+    analysis = analyze_audio(
+        audio_base64=serializer.validated_data.get("audioBase64", ""),
+        transcript=serializer.validated_data.get("transcript", ""),
+        voice_features=serializer.validated_data.get("voiceFeatures"),
+    )
+    mood_log, snapshot = _interaction_response(user_id, "voice", analysis, user=user)
     return Response({"message": "Voice processed", "moodLog": MoodLogSerializer(mood_log).data, "burnoutRisk": snapshot})
 
 
 @api_view(["POST"])
 def video_interaction_view(request):
-    user_id, user, auth_error = _resolve_actor(request, request.data.get("userId"), require_auth=True)
+    serializer = VideoInteractionSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    user_id, user, auth_error = _resolve_actor(
+        request, serializer.validated_data.get("userId"), require_auth=True
+    )
     if auth_error:
         return auth_error
 
-    video_base64 = request.data.get("videoBase64")
-    if not video_base64:
-        return Response(
-            {"message": "videoBase64 required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    mood_log, snapshot = _interaction_response(user_id, "video", analyze_video(video_base64), user=user)
+    analysis = analyze_video(
+        video_base64=serializer.validated_data.get("videoBase64", ""),
+        facial_signals=serializer.validated_data.get("facialSignals"),
+    )
+    mood_log, snapshot = _interaction_response(user_id, "video", analysis, user=user)
     return Response({"message": "Video processed", "moodLog": MoodLogSerializer(mood_log).data, "burnoutRisk": snapshot})
 
 

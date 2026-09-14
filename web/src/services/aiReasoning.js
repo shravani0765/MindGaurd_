@@ -3,10 +3,17 @@ import {
   buildSomaticAdvice,
   fuseWellnessSignals,
 } from './wellnessIntelligence';
+import { aiConfig } from './aiConfig';
+import { buildPersonaPrompt, getArchetype, getRegion } from './archetypes';
 
 class MultimodalAIReasoning {
   constructor() {
     this.conversationHistory = [];
+  }
+
+  /** Number of user turns so far — drives filler rotation and opener suppression. */
+  get turnIndex() {
+    return this.conversationHistory.filter((entry) => entry.role === 'user').length;
   }
 
   /**
@@ -26,6 +33,9 @@ class MultimodalAIReasoning {
       previousEmotion,
     });
 
+    const turn = this.turnIndex;
+    const { archetypeId, regionId } = aiConfig.getCompanionProfile();
+
     this.conversationHistory.push({
       role: 'user',
       text,
@@ -40,6 +50,9 @@ class MultimodalAIReasoning {
       topicFlags: fusion.topicFlags,
       tension: fusion.tension,
       mode: 'combo',
+      archetypeId,
+      regionId,
+      turn,
     });
     const response = `${comfort.message} ${comfort.followUp}`.trim();
     this.conversationHistory.push({ role: 'assistant', text: response, timestamp: Date.now() });
@@ -47,7 +60,10 @@ class MultimodalAIReasoning {
     return {
       fusedEmotion: fusion.emotion,
       confidence: fusion.confidence,
+      urgency: fusion.urgency,
       response,
+      archetype: getArchetype(archetypeId).label,
+      region: getRegion(regionId).label,
       somaticAdvice:
         comfort.somaticAdvice ||
         buildSomaticAdvice({
@@ -56,6 +72,19 @@ class MultimodalAIReasoning {
           tension: fusion.tension,
         }),
     };
+  }
+
+  /**
+   * The persona instructions a server-side or Gemini call should be primed with,
+   * so a model-generated reply matches the tone of the local fallback.
+   */
+  getPersonaPrompt() {
+    const { archetypeId, regionId } = aiConfig.getCompanionProfile();
+    return buildPersonaPrompt({ archetypeId, regionId });
+  }
+
+  reset() {
+    this.conversationHistory = [];
   }
 }
 

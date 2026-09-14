@@ -1,9 +1,10 @@
 // web/src/components/VoiceAssistantOrb.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Sparkles, Radio, HeartPulse, ShieldCheck } from 'lucide-react';
 import { speechService } from '../services/speech';
 import { apiClient } from '../services/api';
 import { buildComfortResponse } from '../services/wellnessIntelligence';
+import { aiConfig } from '../services/aiConfig';
 
 export default function VoiceAssistantOrb({
   isMicOn,
@@ -19,6 +20,7 @@ export default function VoiceAssistantOrb({
   );
   const [detectedEmotion, setDetectedEmotion] = useState('calm');
   const [emotionConfidence, setEmotionConfidence] = useState(0.95);
+  const turnRef = useRef(0);
 
   useEffect(() => {
     if (isMicOn) {
@@ -67,13 +69,19 @@ export default function VoiceAssistantOrb({
       const response = await apiClient.sendTextInteraction(userId, userText);
       const emotion = response.moodLog?.emotion || 'calm';
       const confidence = response.moodLog?.details?.confidence || 0.92;
+      const urgency = response.moodLog?.details?.urgency || 'normal';
+      const { archetypeId, regionId } = aiConfig.getCompanionProfile();
       const comfort = buildComfortResponse({
         text: userText,
         emotion,
-        urgency: response.moodLog?.details?.urgency || 'normal',
+        urgency,
         topicFlags: response.moodLog?.details?.topicFlags || {},
         mode: 'voice',
+        archetypeId,
+        regionId,
+        turn: turnRef.current,
       });
+      turnRef.current += 1;
       setDetectedEmotion(emotion);
       setEmotionConfidence(confidence);
 
@@ -82,17 +90,21 @@ export default function VoiceAssistantOrb({
       const aiReply = `${comfort.message} ${comfort.followUp}`.trim();
       setLastResponse(aiReply);
 
-      // 3. Speak reply using Web Speech Synthesis
+      // 3. Speak the reply with the selected neural persona.
       setOrbState('speaking');
-      speechService.speak(aiReply, () => {
-        // After AI finishes speaking, resume listening if mic is still active
-        if (isMicOn) {
-          setOrbState('listening');
-          startVoiceSession();
-        } else {
-          setOrbState('idle');
-        }
-      });
+      speechService.speak(
+        aiReply,
+        () => {
+          // Resume listening once the reply finishes, if the mic is still on.
+          if (isMicOn) {
+            setOrbState('listening');
+            startVoiceSession();
+          } else {
+            setOrbState('idle');
+          }
+        },
+        { emotion, urgency }
+      );
     } catch (e) {
       console.error('Error handling voice:', e);
       setOrbState('idle');

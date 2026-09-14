@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import './components/ui/ui.css';
 import './App.css';
 import Header from './components/Header';
 import ModeSwitcher from './components/ModeSwitcher';
@@ -12,10 +13,14 @@ import InsightsPanel from './components/InsightsPanel';
 import DashboardHero from './components/DashboardHero';
 import RecoveryGuidePanel from './components/RecoveryGuidePanel';
 import AuthScreen from './components/AuthScreen';
+import OnboardingScreen from './components/OnboardingScreen';
+import VoiceStudioModal from './components/VoiceStudioModal';
 import { ambianceEngine } from './services/audioAmbiance';
 import { Music, X } from 'lucide-react';
 import { apiClient } from './services/api';
 import { clearStoredSession, loadStoredSession, saveStoredSession } from './services/authSession';
+import { aiConfig } from './services/aiConfig';
+import { speechService } from './services/speech';
 
 const EMPTY_SNAPSHOT = {
   burnoutRisk: 28,
@@ -40,6 +45,8 @@ export default function App() {
   const [isSyncingInsights, setIsSyncingInsights] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isMeditationOpen, setIsMeditationOpen] = useState(false);
+  const [isVoiceStudioOpen, setIsVoiceStudioOpen] = useState(false);
+  const [isOnboarded, setIsOnboarded] = useState(() => aiConfig.isOnboarded());
   const [interventionToast, setInterventionToast] = useState(null);
 
   const activeUserId = session?.user?.id || null;
@@ -97,6 +104,13 @@ export default function App() {
     void refreshInsights(activeUserId);
   }, [activeUserId]);
 
+  // Start fetching the neural voice weights as soon as the user is in the app,
+  // so the first spoken reply does not stall behind a cold download.
+  useEffect(() => {
+    if (!activeUserId || !isOnboarded) return;
+    void speechService.preloadNeuralVoice();
+  }, [activeUserId, isOnboarded]);
+
   const handleToggleMic = () => setIsMicOn((prev) => !prev);
   const handleToggleCam = () => setIsCamOn((prev) => !prev);
   const handleToggleTranscript = () => setShowTranscript((prev) => !prev);
@@ -150,6 +164,7 @@ export default function App() {
   const handleAuthenticated = (nextSession) => {
     saveStoredSession(nextSession);
     setSession(nextSession);
+    setIsOnboarded(aiConfig.isOnboarded());
     setBurnoutSnapshot(nextSession.burnoutSnapshot || EMPTY_SNAPSHOT);
     setMoodHistory([]);
     setCurrentMode('text');
@@ -159,6 +174,8 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    speechService.stopSpeaking();
+
     try {
       await apiClient.logout();
     } catch (error) {
@@ -175,6 +192,7 @@ export default function App() {
     setShowTranscript(true);
     setIsDashboardOpen(false);
     setIsMeditationOpen(false);
+    setIsVoiceStudioOpen(false);
   };
 
   const recoveryActions = useMemo(
@@ -197,6 +215,15 @@ export default function App() {
     return <div className="app-loading">Restoring your private check-in space...</div>;
   }
 
+  if (!isOnboarded) {
+    return (
+      <OnboardingScreen
+        userName={session.user?.firstName || session.user?.name}
+        onComplete={() => setIsOnboarded(true)}
+      />
+    );
+  }
+
   return (
     <div className="app-shell">
       <Header
@@ -204,6 +231,7 @@ export default function App() {
         onOpenDashboard={() => setIsDashboardOpen(true)}
         userName={session.user?.firstName || session.user?.name}
         onLogout={handleLogout}
+        onOpenVoiceStudio={() => setIsVoiceStudioOpen(true)}
       />
 
       {interventionToast && (
@@ -308,6 +336,8 @@ export default function App() {
         isOpen={isMeditationOpen}
         onClose={() => setIsMeditationOpen(false)}
       />
+
+      <VoiceStudioModal isOpen={isVoiceStudioOpen} onClose={() => setIsVoiceStudioOpen(false)} />
     </div>
   );
 }

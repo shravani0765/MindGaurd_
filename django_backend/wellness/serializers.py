@@ -56,6 +56,72 @@ class MoodEntrySerializer(serializers.Serializer):
     details = serializers.JSONField(required=False)
 
 
+class TextInteractionSerializer(serializers.Serializer):
+    userId = serializers.CharField(max_length=64, required=False, allow_blank=True)
+    text = serializers.CharField(max_length=5000, allow_blank=False, trim_whitespace=True)
+
+
+class VoiceInteractionSerializer(serializers.Serializer):
+    """A voice check-in needs at least one channel carrying real information."""
+
+    userId = serializers.CharField(max_length=64, required=False, allow_blank=True)
+    audioBase64 = serializers.CharField(required=False, allow_blank=True)
+    transcript = serializers.CharField(max_length=5000, required=False, allow_blank=True)
+    voiceFeatures = serializers.JSONField(required=False)
+
+    def validate_voiceFeatures(self, value):
+        return _validate_signal_map(value, "voiceFeatures")
+
+    def validate(self, attrs):
+        if not any(
+            [
+                (attrs.get("transcript") or "").strip(),
+                (attrs.get("audioBase64") or "").strip(),
+                attrs.get("voiceFeatures"),
+            ]
+        ):
+            raise serializers.ValidationError(
+                {"transcript": "Provide a transcript, voice features, or audio to analyse."}
+            )
+        return attrs
+
+
+class VideoInteractionSerializer(serializers.Serializer):
+    userId = serializers.CharField(max_length=64, required=False, allow_blank=True)
+    videoBase64 = serializers.CharField(required=False, allow_blank=True)
+    facialSignals = serializers.JSONField(required=False)
+
+    def validate_facialSignals(self, value):
+        return _validate_signal_map(value, "facialSignals", allow_text_keys=("emotion",))
+
+    def validate(self, attrs):
+        if not (attrs.get("facialSignals") or (attrs.get("videoBase64") or "").strip()):
+            raise serializers.ValidationError(
+                {"facialSignals": "Provide facial signals or a video frame to analyse."}
+            )
+        return attrs
+
+
+def _validate_signal_map(value, field_name, allow_text_keys=()):
+    """Signal maps must be flat dictionaries of numbers (plus named text keys)."""
+    if value in (None, ""):
+        return {}
+    if not isinstance(value, dict):
+        raise serializers.ValidationError(f"{field_name} must be an object.")
+    if len(value) > 20:
+        raise serializers.ValidationError(f"{field_name} has too many entries.")
+
+    for key, entry in value.items():
+        if key in allow_text_keys:
+            if not isinstance(entry, str):
+                raise serializers.ValidationError(f"{field_name}.{key} must be a string.")
+            continue
+        if isinstance(entry, bool) or not isinstance(entry, (int, float)):
+            raise serializers.ValidationError(f"{field_name}.{key} must be a number.")
+
+    return value
+
+
 class TokenRegistrationSerializer(serializers.Serializer):
     userId = serializers.CharField(max_length=64, required=False, allow_blank=True)
     expoPushToken = serializers.CharField(max_length=255)

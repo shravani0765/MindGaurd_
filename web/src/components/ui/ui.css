@@ -1,0 +1,508 @@
+/* MindGuard shared UI primitives.
+   Every token here already exists in index.css, so primitives inherit the
+   calming palette rather than redefining it. */
+
+/* ---------------------------------------------------------------- Button */
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  font-family: var(--font-heading);
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease,
+    border-color 0.18s ease, color 0.18s ease;
+}
+
+.ui-button:focus-visible {
+  outline: 3px solid rgba(20, 184, 166, 0.45);
+  outline-offset: 2px;
+}
+
+.ui-button--sm {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 0.78rem;
+}
+
+.ui-button--md {
+  min-height: 44px;
+  padding: 0 20px;
+  font-size: 0.9rem;
+}
+
+.ui-button--lg {
+  min-height: 52px;
+  padding: 0 28px;
+  font-size: 1rem;
+}
+
+.ui-button--block {
+  width: 100%;
+}
+
+.ui-button--primary {
+  background: var(--calm-blue-deep);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(15, 118, 110, 0.2);
+}
+
+.ui-button--primary:hover:not(:disabled) {
+  background: #0c6058;
+  transform: translateY(-1px);
+  box-shadow: 0 16px 30px rgba(15, 118, 110, 0.26);
+}
+
+.ui-button--ghost {
+  background: #ffffff;
+  border-color: var(--border-glass);
+  color: var(--calm-blue-deep);
+}
+
+.ui-button--ghost:hover:not(:disabled) {
+  background: var(--sage-green-light);
+  border-color: var(--border-glass-green);
+}
+
+.ui-button--ghost.is-active,
+.ui-button--ghost[aria-pressed='true'] {
+  background: var(--sage-green-light);
+  border-color: var(--sage-green);
+  color: var(--sage-green-deep);
+}
+
+.ui-button--danger {
+  background: #b91c1c;
+  color: #ffffff;
+}
+
+.ui-button--danger:hover:not(:disabled) {
+  background: #991b1b;
+}
+
+.ui-button--link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  min-height: 0;
+  color: var(--calm-blue-deep);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ui-button--link:hover:not(:disabled) {
+  color: var(--sage-green-deep);
+}
+
+.ui-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
+.ui-button__spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: ui-spin 0.7s linear infinite;
+}
+
+@keyframes ui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ----------------------------------------------------------------- Field */
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.ui-field__label {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.ui-field__control {
+  width: 100%;
+  min-height: 48px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  background: #ffffff;
+  padding: 12px 14px;
+  font: inherit;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+textarea.ui-field__control {
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.ui-field__control::placeholder {
+  color: var(--text-muted);
+}
+
+.ui-field__control:focus {
+  border-color: var(--calm-blue);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.12);
+}
+
+.ui-field--invalid .ui-field__control {
+  border-color: rgba(185, 28, 28, 0.5);
+}
+
+.ui-field--invalid .ui-field__control:focus {
+  box-shadow: 0 0 0 4px rgba(185, 28, 28, 0.12);
+}
+
+.ui-field__hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.ui-field__error {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.ui-field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ui-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.ui-checkbox input {
+  margin-top: 4px;
+  width: 17px;
+  height: 17px;
+  accent-color: var(--calm-blue-deep);
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------- Callout */
+.ui-callout {
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.ui-callout--info {
+  border-left: 4px solid var(--sage-green);
+  background: rgba(20, 184, 166, 0.08);
+  color: var(--text-primary);
+}
+
+.ui-callout--muted {
+  border: 1px solid var(--border-glass);
+  background: var(--bg-surface-elevated);
+  color: var(--text-secondary);
+}
+
+.ui-callout--danger {
+  border: 1px solid rgba(185, 28, 28, 0.3);
+  background: #fff5f5;
+  color: #7f1d1d;
+}
+
+.ui-callout__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-family: var(--font-heading);
+}
+
+.ui-callout__title + .ui-callout__body {
+  margin-top: 8px;
+}
+
+.ui-callout__body p + p {
+  margin-top: 8px;
+}
+
+.ui-callout__body a {
+  color: inherit;
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------- StatusBanner */
+.ui-status {
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.ui-status--success {
+  background: #effbf8;
+  border: 1px solid rgba(15, 159, 143, 0.22);
+  color: var(--sage-green-deep);
+}
+
+.ui-status--error {
+  background: #fff5f5;
+  border: 1px solid rgba(185, 28, 28, 0.24);
+  color: #991b1b;
+}
+
+.ui-status--info {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-glass);
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------------------------ Badge */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: var(--radius-full);
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+}
+
+.ui-badge--neutral {
+  background: var(--bg-surface-elevated);
+  border-color: var(--border-glass);
+  color: var(--text-secondary);
+}
+
+.ui-badge--positive {
+  background: var(--sage-green-light);
+  border-color: var(--border-glass-green);
+  color: var(--sage-green-deep);
+}
+
+.ui-badge--caution {
+  background: rgba(234, 127, 56, 0.12);
+  border-color: rgba(234, 127, 56, 0.3);
+  color: #a2520f;
+}
+
+.ui-badge--critical {
+  background: #fff1f1;
+  border-color: rgba(185, 28, 28, 0.26);
+  color: #991b1b;
+}
+
+/* ------------------------------------------------------------------ Panel */
+.ui-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-glass);
+}
+
+.ui-panel--padded {
+  padding: 22px 24px;
+}
+
+.ui-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.ui-panel__eyebrow {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-accent);
+  margin-bottom: 6px;
+}
+
+.ui-panel__title {
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.ui-panel__description {
+  margin-top: 6px;
+  max-width: 58ch;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.ui-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ------------------------------------------------------------- OptionCard */
+.ui-option {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 15px 16px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border-glass);
+  background: #ffffff;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.ui-option:hover:not(.is-disabled) {
+  border-color: var(--border-glass-green);
+  background: var(--bg-glass-card-hover);
+}
+
+.ui-option input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.ui-option:focus-within {
+  outline: 3px solid rgba(20, 184, 166, 0.4);
+  outline-offset: 2px;
+}
+
+.ui-option.is-selected {
+  border-color: var(--sage-green);
+  background: var(--sage-green-light);
+  box-shadow: var(--shadow-glow-sage);
+}
+
+.ui-option.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.ui-option__glyph {
+  font-size: 1.4rem;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.ui-option__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ui-option__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.97rem;
+  color: var(--text-primary);
+}
+
+.ui-option__meta {
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-surface-elevated);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+}
+
+.ui-option__description {
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.ui-option__check {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--sage-green);
+  color: #ffffff;
+  opacity: 0;
+  transform: scale(0.7);
+  transition: var(--transition-bounce);
+}
+
+.ui-option.is-selected .ui-option__check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.ui-option-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.ui-option-grid--two {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+@media (max-width: 680px) {
+  .ui-field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ui-panel--padded {
+    padding: 18px 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-button,
+  .ui-option,
+  .ui-option__check {
+    transition: none;
+  }
+
+  .ui-button:hover:not(:disabled) {
+    transform: none;
+  }
+
+  .ui-button__spinner {
+    animation-duration: 2s;
+  }
+}

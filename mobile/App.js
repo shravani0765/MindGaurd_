@@ -76,6 +76,11 @@ export default function App() {
     setBurnoutSnapshot((prev) => ({ ...prev, ...snapshot }));
   }
 
+  const switchMode = (nextMode) => {
+    setMode(nextMode);
+    setBanner(null);
+  };
+
   const handleLogin = async () => {
     setIsSubmitting(true);
     setBanner(null);
@@ -139,106 +144,178 @@ export default function App() {
   };
 
   if (!session) {
+    const isLogin = mode === 'login';
+
     return (
       <SafeAreaView style={styles.safe}>
-        <StatusBar style="dark" />
-        <ScrollView contentContainerStyle={styles.authShell}>
+        <StatusBar style="light" />
+        <ScrollView contentContainerStyle={styles.authShell} keyboardShouldPersistTaps="handled">
           <View style={styles.authCard}>
-            <Text style={styles.brand}>MindGuard Mobile</Text>
-            <Text style={styles.subtitle}>A simple companion for stress check-ins on the go.</Text>
-
-            <View style={styles.apiBlock}>
-              <Text style={styles.label}>API URL</Text>
-              <TextInput
-                style={styles.input}
-                value={apiUrl}
-                onChangeText={setApiUrl}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+            {/* Green banner, matching the web sign-in card. */}
+            <View style={styles.authHeader}>
+              <Text style={styles.authHeaderBrand}>MINDGUARD</Text>
+              <Text style={styles.authHeaderTitle}>
+                {isLogin ? 'Login to your account' : 'Sign up'}
+              </Text>
+              <Text style={styles.authHeaderSubtitle}>
+                {isLogin
+                  ? 'Welcome back, please log in using your details below'
+                  : 'Everything you share stays confidential. Your check-ins travel over an encrypted connection and are only ever visible to your own account.'}
+              </Text>
             </View>
 
-            <View style={styles.switchRow}>
-              <Pressable style={[styles.switchButton, mode === 'login' && styles.switchButtonActive]} onPress={() => setMode('login')}>
-                <Text style={[styles.switchText, mode === 'login' && styles.switchTextActive]}>Log in</Text>
-              </Pressable>
-              <Pressable style={[styles.switchButton, mode === 'signup' && styles.switchButtonActive]} onPress={() => setMode('signup')}>
-                <Text style={[styles.switchText, mode === 'signup' && styles.switchTextActive]}>Sign up</Text>
-              </Pressable>
+            <View style={styles.authBody}>
+              {banner && (
+                <View style={[styles.banner, banner.type === 'error' ? styles.bannerError : styles.bannerSuccess]}>
+                  <Text
+                    style={[
+                      styles.bannerText,
+                      banner.type === 'error' ? styles.bannerTextError : styles.bannerTextSuccess,
+                    ]}
+                  >
+                    {banner.text}
+                  </Text>
+                </View>
+              )}
+
+              {isLogin ? (
+                <>
+                  <LabelledInput
+                    label="Email"
+                    value={loginForm.email}
+                    onChangeText={(value) => setLoginForm((prev) => ({ ...prev, email: value }))}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    textContentType="emailAddress"
+                  />
+                  <LabelledInput
+                    label="Password"
+                    value={loginForm.password}
+                    onChangeText={(value) => setLoginForm((prev) => ({ ...prev, password: value }))}
+                    secureTextEntry
+                    textContentType="password"
+                  />
+
+                  <Pressable
+                    style={[styles.primaryButton, styles.centeredButton, isSubmitting && styles.buttonDisabled]}
+                    onPress={handleLogin}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={styles.primaryButtonText}>{isSubmitting ? 'Signing in...' : 'Log In'}</Text>
+                  </Pressable>
+
+                  <Text style={styles.switchCopy}>
+                    New user?{' '}
+                    <Text style={styles.switchLink} onPress={() => switchMode('signup')}>
+                      Sign up now
+                    </Text>
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <View style={styles.row}>
+                    <LabelledInput
+                      label="First Name"
+                      style={styles.halfInput}
+                      value={signupForm.firstName}
+                      onChangeText={(value) => setSignupForm((prev) => ({ ...prev, firstName: value }))}
+                    />
+                    <LabelledInput
+                      label="Last Name"
+                      style={styles.halfInput}
+                      value={signupForm.lastName}
+                      onChangeText={(value) => setSignupForm((prev) => ({ ...prev, lastName: value }))}
+                    />
+                  </View>
+
+                  <View style={styles.infoNote}>
+                    <Text style={styles.infoNoteText}>
+                      This account needs to be in the name of whoever is receiving support.
+                    </Text>
+                  </View>
+
+                  <LabelledInput
+                    label="Email"
+                    value={signupForm.email}
+                    onChangeText={(value) => setSignupForm((prev) => ({ ...prev, email: value }))}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    textContentType="emailAddress"
+                  />
+
+                  <View style={styles.row}>
+                    <LabelledInput
+                      label="Password"
+                      style={styles.halfInput}
+                      value={signupForm.password}
+                      onChangeText={(value) => setSignupForm((prev) => ({ ...prev, password: value }))}
+                      secureTextEntry
+                    />
+                    <LabelledInput
+                      label="Repeat Password"
+                      style={styles.halfInput}
+                      value={signupForm.passwordConfirm}
+                      onChangeText={(value) => setSignupForm((prev) => ({ ...prev, passwordConfirm: value }))}
+                      secureTextEntry
+                    />
+                  </View>
+
+                  <Pressable
+                    style={styles.termsRow}
+                    onPress={() => setSignupForm((prev) => ({ ...prev, agreeToTerms: !prev.agreeToTerms }))}
+                  >
+                    <View style={[styles.checkbox, signupForm.agreeToTerms && styles.checkboxChecked]}>
+                      {signupForm.agreeToTerms && <Text style={styles.checkboxMark}>✓</Text>}
+                    </View>
+                    <Text style={styles.termsText}>
+                      I agree to the Terms of Service and understand that MindGuard supports wellness
+                      check-ins and is not a substitute for emergency care.
+                    </Text>
+                  </Pressable>
+
+                  <View style={styles.signupActions}>
+                    <Text style={styles.switchCopy}>
+                      Already have an account?{' '}
+                      <Text style={styles.switchLink} onPress={() => switchMode('login')}>
+                        Log in now
+                      </Text>
+                    </Text>
+                    <Pressable
+                      style={[styles.primaryButton, isSubmitting && styles.buttonDisabled]}
+                      onPress={handleSignup}
+                      disabled={isSubmitting}
+                    >
+                      <Text style={styles.primaryButtonText}>{isSubmitting ? 'Creating...' : 'Continue'}</Text>
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.dangerNote}>
+                    <Text style={styles.dangerNoteTitle}>
+                      ⚠ If you are in a life threatening situation — don&apos;t use this site
+                    </Text>
+                    <Text style={styles.dangerNoteText}>
+                      Call or text 988 (Suicide &amp; Crisis Lifeline) for immediate support, or call 911
+                      / go to your nearest emergency room if you are in immediate danger.
+                    </Text>
+                    <Text style={styles.dangerNoteText}>
+                      For treatment referrals, SAMHSA&apos;s National Helpline is 1-800-662-HELP (4357),
+                      free and available 24/7.
+                    </Text>
+                  </View>
+                </>
+              )}
+
+              <View style={styles.apiBlock}>
+                <Text style={styles.label}>API URL</Text>
+                <TextInput
+                  style={styles.input}
+                  value={apiUrl}
+                  onChangeText={setApiUrl}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
             </View>
-
-            {banner && (
-              <View style={[styles.banner, banner.type === 'error' ? styles.bannerError : styles.bannerSuccess]}>
-                <Text style={[styles.bannerText, banner.type === 'error' ? styles.bannerTextError : styles.bannerTextSuccess]}>{banner.text}</Text>
-              </View>
-            )}
-
-            {mode === 'login' ? (
-              <View style={styles.formBlock}>
-                <Text style={styles.formTitle}>Login to your account</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email"
-                  value={loginForm.email}
-                  onChangeText={(value) => setLoginForm((prev) => ({ ...prev, email: value }))}
-                  autoCapitalize="none"
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Password"
-                  value={loginForm.password}
-                  onChangeText={(value) => setLoginForm((prev) => ({ ...prev, password: value }))}
-                  secureTextEntry
-                />
-                <Pressable style={styles.primaryButton} onPress={handleLogin} disabled={isSubmitting}>
-                  <Text style={styles.primaryButtonText}>{isSubmitting ? 'Signing in...' : 'Log In'}</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <View style={styles.formBlock}>
-                <Text style={styles.formTitle}>Create your support account</Text>
-                <View style={styles.row}>
-                  <TextInput
-                    style={[styles.input, styles.halfInput]}
-                    placeholder="First Name"
-                    value={signupForm.firstName}
-                    onChangeText={(value) => setSignupForm((prev) => ({ ...prev, firstName: value }))}
-                  />
-                  <TextInput
-                    style={[styles.input, styles.halfInput]}
-                    placeholder="Last Name"
-                    value={signupForm.lastName}
-                    onChangeText={(value) => setSignupForm((prev) => ({ ...prev, lastName: value }))}
-                  />
-                </View>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email"
-                  value={signupForm.email}
-                  onChangeText={(value) => setSignupForm((prev) => ({ ...prev, email: value }))}
-                  autoCapitalize="none"
-                />
-                <View style={styles.row}>
-                  <TextInput
-                    style={[styles.input, styles.halfInput]}
-                    placeholder="Password"
-                    value={signupForm.password}
-                    onChangeText={(value) => setSignupForm((prev) => ({ ...prev, password: value }))}
-                    secureTextEntry
-                  />
-                  <TextInput
-                    style={[styles.input, styles.halfInput]}
-                    placeholder="Repeat Password"
-                    value={signupForm.passwordConfirm}
-                    onChangeText={(value) => setSignupForm((prev) => ({ ...prev, passwordConfirm: value }))}
-                    secureTextEntry
-                  />
-                </View>
-                <Pressable style={styles.primaryButton} onPress={handleSignup} disabled={isSubmitting}>
-                  <Text style={styles.primaryButtonText}>{isSubmitting ? 'Creating...' : 'Continue'}</Text>
-                </Pressable>
-              </View>
-            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -314,6 +391,16 @@ export default function App() {
   );
 }
 
+/** Label + input pair, so mobile fields carry the same affordance as the web form. */
+function LabelledInput({ label, style, ...inputProps }) {
+  return (
+    <View style={[styles.fieldBlock, style]}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput style={styles.input} placeholderTextColor="#9bb3b9" {...inputProps} />
+    </View>
+  );
+}
+
 function formatLabel(value) {
   return (value || 'neutral')
     .replace(/[-_]/g, ' ')
@@ -326,7 +413,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f4fbfa',
   },
   authShell: {
-    padding: 20,
+    padding: 16,
     justifyContent: 'center',
     minHeight: '100%',
   },
@@ -337,13 +424,117 @@ const styles = StyleSheet.create({
   authCard: {
     backgroundColor: '#ffffff',
     borderRadius: 24,
-    padding: 20,
-    gap: 16,
+    overflow: 'hidden',
     shadowColor: '#0f766e',
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 5,
+  },
+  authHeader: {
+    backgroundColor: '#0f766e',
+    paddingHorizontal: 22,
+    paddingVertical: 26,
+  },
+  authHeaderBrand: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.6,
+    marginBottom: 10,
+  },
+  authHeaderTitle: {
+    color: '#ffffff',
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  authHeaderSubtitle: {
+    color: 'rgba(255, 255, 255, 0.92)',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 8,
+  },
+  authBody: {
+    padding: 22,
+    gap: 16,
+  },
+  fieldBlock: {
+    gap: 7,
+  },
+  centeredButton: {
+    alignSelf: 'center',
+    minWidth: 180,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  switchCopy: {
+    color: '#55727a',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  switchLink: {
+    color: '#0f766e',
+    fontWeight: '800',
+  },
+  signupActions: {
+    gap: 14,
+  },
+  infoNote: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#0f9f8f',
+    backgroundColor: 'rgba(20, 184, 166, 0.08)',
+    borderRadius: 12,
+    padding: 14,
+  },
+  infoNoteText: {
+    color: '#17353d',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  dangerNote: {
+    borderWidth: 1,
+    borderColor: 'rgba(185, 28, 28, 0.3)',
+    backgroundColor: '#fff5f5',
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+  },
+  dangerNoteTitle: {
+    color: '#7f1d1d',
+    fontWeight: '800',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  dangerNoteText: {
+    color: '#7f1d1d',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#bfe6df',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  checkboxChecked: {
+    backgroundColor: '#0f766e',
+    borderColor: '#0f766e',
+  },
+  checkboxMark: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
   },
   dashboardHeader: {
     flexDirection: 'row',
@@ -368,36 +559,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#55727a',
-  },
-  switchRow: {
-    flexDirection: 'row',
-    backgroundColor: '#edf8f7',
-    borderRadius: 999,
-    padding: 4,
-  },
-  switchButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 999,
-    alignItems: 'center',
-  },
-  switchButtonActive: {
-    backgroundColor: '#ffffff',
-  },
-  switchText: {
-    color: '#55727a',
-    fontWeight: '700',
-  },
-  switchTextActive: {
-    color: '#0f766e',
-  },
-  formBlock: {
-    gap: 12,
-  },
-  formTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#17353d',
   },
   row: {
     flexDirection: 'row',

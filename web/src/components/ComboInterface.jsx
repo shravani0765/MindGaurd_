@@ -170,14 +170,18 @@ export default function ComboInterface({
 
       // 4. Speak reply with warm voice
       setOrbState('speaking');
-      speechService.speak(aiResult.response, () => {
-        if (isMicOn) {
-          setOrbState('listening');
-          startVoiceSession();
-        } else {
-          setOrbState('idle');
-        }
-      });
+      speechService.speak(
+        aiResult.response,
+        () => {
+          if (isMicOn) {
+            setOrbState('listening');
+            startVoiceSession();
+          } else {
+            setOrbState('idle');
+          }
+        },
+        { emotion: aiResult.fusedEmotion, urgency: aiResult.urgency }
+      );
     } catch (err) {
       console.error('Multimodal processing error:', err);
       setOrbState('idle');

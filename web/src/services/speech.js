@@ -1,5 +1,7 @@
 // web/src/services/speech.js
 import { aiConfig } from './aiConfig';
+import { getPersona, kokoroEngine } from './kokoroEngine';
+import { conditionForSpeech, resolveCadence } from './prosody';
 
 class SpeechService {
   constructor() {
@@ -15,6 +17,10 @@ class SpeechService {
     this.accumulatedTranscript = '';
     this.interimTranscript = '';
     this.silenceTimer = null;
+
+    // Incremented on every speak()/stopSpeaking() so a slow neural chunk
+    // that resolves after the user moved on cannot start playing late.
+    this.utteranceToken = 0;
 
     this.initRecognition();
   }
@@ -167,52 +173,112 @@ class SpeechService {
     }
   }
 
-  speak(text, onEnd) {
-    if (!this.synth) {
-      if (onEnd) onEnd();
+  /**
+   * Speaks a reply with breath-paced prosody.
+   *
+   * Tries the local Kokoro neural voice first; if the weights are still
+   * compiling, the persona has no neural speaker, or synthesis fails, it hands
+   * the same conditioned text to the browser synthesiser so the user never
+   * hears a dropped reply.
+   */
+  async speak(text, onEnd, options = {}) {
+    const conditioned = conditionForSpeech(text);
+    if (!conditioned) {
+      onEnd?.();
       return;
     }
+
+    this.stopSpeaking();
+    const token = ++this.utteranceToken;
+
+    const profile = aiConfig.getCompanionProfile();
+    const personaId = options.personaId || profile.personaId;
+    const persona = getPersona(personaId);
+    const emotion = options.emotion || 'neutral';
+    const urgency = options.urgency || 'normal';
+
+    const finish = () => {
+      if (token === this.utteranceToken) onEnd?.();
+    };
+
+    if (profile.engine === 'neural' && persona.neuralAvailable) {
+      try {
+        const played = await kokoroEngine.speak(conditioned, {
+          personaId,
+          emotion,
+          urgency,
+          onStart: options.onStart,
+          onEnd: finish,
+        });
+        if (played || token !== this.utteranceToken) return;
+      } catch (error) {
+        console.warn('Neural voice failed, falling back to browser speech:', error);
+        if (token !== this.utteranceToken) return;
+      }
+    }
+
+    this.speakWithBrowser(conditioned, { persona, emotion, urgency, token, onStart: options.onStart, onEnd: finish });
+  }
+
+  /** Web Speech API path. Receives text that is already prosody-conditioned. */
+  speakWithBrowser(conditionedText, { persona, emotion, urgency, token, onStart, onEnd }) {
+    if (!this.synth) {
+      onEnd?.();
+      return;
+    }
+
     this.synth.cancel();
 
-    if (!text || !text.trim()) {
-      if (onEnd) onEnd();
-      return;
-    }
+    const utterance = new SpeechSynthesisUtterance(conditionedText);
+    const cadence = resolveCadence({ emotion, dialect: persona.dialect, urgency });
+    utterance.rate = cadence.rate;
+    utterance.pitch = cadence.pitch;
+    utterance.volume = cadence.volume;
+    utterance.lang = persona.fallbackLang;
 
-    // Clean text of markdown tokens, asterisks, hashtags for calm speech output
-    const cleanText = text
-      .replace(/[*_#~[]()]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const voice = this.pickBrowserVoice(persona.fallbackLang);
+    if (voice) utterance.voice = voice;
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 0.95;
-    utterance.pitch = 1.0;
-
-    const voices = this.synth.getVoices();
-    const calmVoice = voices.find(
-      (v) =>
-        (v.name.includes('Natural') ||
-          v.name.includes('Google') ||
-          v.name.includes('Samantha') ||
-          v.name.includes('Karen') ||
-          v.name.includes('Victoria') ||
-          v.name.includes('Zira')) &&
-        v.lang.startsWith('en')
-    );
-    if (calmVoice) {
-      utterance.voice = calmVoice;
-    }
-
-    if (onEnd) {
-      utterance.onend = onEnd;
-      utterance.onerror = onEnd;
-    }
+    utterance.onstart = () => {
+      if (token === this.utteranceToken) onStart?.();
+    };
+    utterance.onend = onEnd;
+    utterance.onerror = onEnd;
 
     this.synth.speak(utterance);
   }
 
+  /**
+   * Prefers a voice in the persona's own locale, then a high-quality voice in
+   * the same base language, before letting the platform pick its default.
+   */
+  pickBrowserVoice(preferredLang = 'en-US') {
+    if (!this.synth) return null;
+    const voices = this.synth.getVoices();
+    if (!voices.length) return null;
+
+    const baseLang = preferredLang.split('-')[0];
+    const isHighQuality = (voice) =>
+      /Natural|Neural|Enhanced|Premium|Google|Samantha|Karen|Victoria|Zira|Rishi|Veena/i.test(voice.name);
+
+    return (
+      voices.find((voice) => voice.lang.replace('_', '-') === preferredLang && isHighQuality(voice)) ||
+      voices.find((voice) => voice.lang.replace('_', '-') === preferredLang) ||
+      voices.find((voice) => voice.lang.startsWith(baseLang) && isHighQuality(voice)) ||
+      voices.find((voice) => voice.lang.startsWith(baseLang)) ||
+      null
+    );
+  }
+
+  /** Warms the neural weights so the first reply does not wait on a download. */
+  preloadNeuralVoice(onProgress) {
+    if (aiConfig.getTtsEngine() !== 'neural') return Promise.resolve(null);
+    return kokoroEngine.preload(onProgress);
+  }
+
   stopSpeaking() {
+    this.utteranceToken += 1;
+    kokoroEngine.stop();
     if (this.synth) {
       this.synth.cancel();
     }

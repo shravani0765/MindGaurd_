@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ShieldCheck } from 'lucide-react';
 import { apiClient } from '../services/api';
+import { Button, Callout, CheckboxField, Field, FieldRow, StatusBanner } from './ui';
 
 const LOGIN_FORM = { email: '', password: '' };
 const SIGNUP_FORM = {
@@ -14,6 +15,28 @@ const SIGNUP_FORM = {
 const FORGOT_FORM = { email: '' };
 const RESET_FORM = { password: '', passwordConfirm: '' };
 
+const MIN_PASSWORD_LENGTH = 8;
+
+const HEADERS = {
+  login: {
+    title: 'Login to your account',
+    subtitle: 'Welcome back, please log in using your details below',
+  },
+  signup: {
+    title: 'Sign up',
+    subtitle:
+      'Everything you share stays confidential. Your check-ins travel over an encrypted connection and are only ever visible to your own account.',
+  },
+  forgot: {
+    title: 'Reset your password',
+    subtitle: 'Enter your email and we will send a secure reset link if the account exists.',
+  },
+  reset: {
+    title: 'Create a new password',
+    subtitle: 'Use a password you have not used before and keep it private.',
+  },
+};
+
 export default function AuthScreen({
   onAuthenticated,
   initialMode = 'login',
@@ -26,28 +49,34 @@ export default function AuthScreen({
   const [forgotForm, setForgotForm] = useState(FORGOT_FORM);
   const [resetForm, setResetForm] = useState(RESET_FORM);
   const [banner, setBanner] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     async function runVerification() {
-      if (routePath === '/verify-email' && routeToken) {
-        setIsSubmitting(true);
-        try {
-          const response = await apiClient.verifyEmail(routeToken);
-          setBanner({ type: 'success', text: response.message || 'Email verified. You can log in now.' });
-          setMode('login');
-          window.history.replaceState({}, '', '/');
-        } catch (error) {
-          setBanner({ type: 'error', text: error.message || 'Verification link is invalid or expired.' });
-          setMode('login');
-        } finally {
-          setIsSubmitting(false);
-        }
+      if (routePath !== '/verify-email' || !routeToken) return;
+
+      setIsSubmitting(true);
+      try {
+        const response = await apiClient.verifyEmail(routeToken);
+        setBanner({ tone: 'success', text: response.message || 'Email verified. You can log in now.' });
+        window.history.replaceState({}, '', '/');
+      } catch (error) {
+        setBanner({ tone: 'error', text: error.message || 'Verification link is invalid or expired.' });
+      } finally {
+        setMode('login');
+        setIsSubmitting(false);
       }
     }
 
     void runVerification();
   }, [routePath, routeToken]);
+
+  const switchMode = (nextMode) => {
+    setMode(nextMode);
+    setBanner(null);
+    setFieldErrors({});
+  };
 
   const handleLogin = async (event) => {
     event.preventDefault();
@@ -57,7 +86,7 @@ export default function AuthScreen({
       const session = await apiClient.login(loginForm);
       onAuthenticated(session);
     } catch (error) {
-      setBanner({ type: 'error', text: error.message || 'Unable to sign in right now.' });
+      setBanner({ tone: 'error', text: error.message || 'Unable to sign in right now.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -65,21 +94,31 @@ export default function AuthScreen({
 
   const handleSignup = async (event) => {
     event.preventDefault();
+
+    // Validate locally first so the user is not charged a round-trip for a typo.
+    const errors = validateSignup(signupForm);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) {
+      setBanner({ tone: 'error', text: 'Please correct the highlighted fields before continuing.' });
+      return;
+    }
+
     setIsSubmitting(true);
     setBanner(null);
     try {
       const response = await apiClient.register(signupForm);
       setBanner({
-        type: 'success',
+        tone: 'success',
         text: response.verificationUrl
-          ? `Account created. Open the verification link from email or use this local debug link: ${response.verificationUrl}`
+          ? `Account created. Open the verification link from your email, or use this local debug link: ${response.verificationUrl}`
           : response.message || 'Account created. Check your email to verify it.',
       });
       setMode('login');
       setLoginForm((prev) => ({ ...prev, email: signupForm.email }));
       setSignupForm(SIGNUP_FORM);
+      setFieldErrors({});
     } catch (error) {
-      setBanner({ type: 'error', text: error.message || 'Unable to create your account.' });
+      setBanner({ tone: 'error', text: error.message || 'Unable to create your account.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -92,14 +131,14 @@ export default function AuthScreen({
     try {
       const response = await apiClient.requestPasswordReset(forgotForm.email);
       setBanner({
-        type: 'success',
+        tone: 'success',
         text: response.resetUrl
           ? `Reset link generated for local testing: ${response.resetUrl}`
           : response.message || 'If that email exists, a reset link has been sent.',
       });
       setForgotForm(FORGOT_FORM);
     } catch (error) {
-      setBanner({ type: 'error', text: error.message || 'Unable to start password reset.' });
+      setBanner({ tone: 'error', text: error.message || 'Unable to start password reset.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -107,262 +146,276 @@ export default function AuthScreen({
 
   const handleReset = async (event) => {
     event.preventDefault();
+
+    const errors = validatePasswordPair(resetForm);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) return;
+
     setIsSubmitting(true);
     setBanner(null);
     try {
-      const response = await apiClient.confirmPasswordReset(routeToken, resetForm.password, resetForm.passwordConfirm);
-      setBanner({ type: 'success', text: response.message || 'Password updated. You can log in now.' });
+      const response = await apiClient.confirmPasswordReset(
+        routeToken,
+        resetForm.password,
+        resetForm.passwordConfirm
+      );
+      setBanner({ tone: 'success', text: response.message || 'Password updated. You can log in now.' });
       setResetForm(RESET_FORM);
       setMode('login');
       window.history.replaceState({}, '', '/');
     } catch (error) {
-      setBanner({ type: 'error', text: error.message || 'Unable to reset password.' });
+      setBanner({ tone: 'error', text: error.message || 'Unable to reset password.' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const header = HEADERS[mode];
+
   return (
     <div className="auth-shell">
-      <div className="auth-card glass-panel">
+      <div className="auth-card">
+        <div className="auth-card__header">
+          <span className="auth-card__brand">
+            <ShieldCheck size={15} aria-hidden="true" />
+            MindGuard
+          </span>
+          <h1>{header.title}</h1>
+          <p>{header.subtitle}</p>
+        </div>
+
         {mode === 'login' && (
-          <form onSubmit={handleLogin} className="auth-form">
-            <div className="auth-card__header auth-card__header--gradient">
-              <h1>Login to your account</h1>
-              <p>Welcome back, please log in using your details below</p>
-            </div>
+          <form onSubmit={handleLogin} className="auth-card__body" noValidate>
+            {banner && <StatusBanner tone={banner.tone}>{banner.text}</StatusBanner>}
 
-            <div className="auth-card__body">
-              {banner && <StatusBanner banner={banner} />}
+            <Field
+              label="Email"
+              type="email"
+              autoComplete="email"
+              value={loginForm.email}
+              onChange={(event) => setLoginForm((prev) => ({ ...prev, email: event.target.value }))}
+              required
+            />
 
-              <label className="auth-field">
-                <span>Email</span>
-                <input
-                  type="email"
-                  value={loginForm.email}
-                  onChange={(event) => setLoginForm((prev) => ({ ...prev, email: event.target.value }))}
-                  className="auth-input"
-                  required
-                />
-              </label>
+            <Field
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              value={loginForm.password}
+              onChange={(event) => setLoginForm((prev) => ({ ...prev, password: event.target.value }))}
+              required
+            />
 
-              <label className="auth-field">
-                <span>Password</span>
-                <input
-                  type="password"
-                  value={loginForm.password}
-                  onChange={(event) => setLoginForm((prev) => ({ ...prev, password: event.target.value }))}
-                  className="auth-input"
-                  required
-                />
-              </label>
-
-              <button type="submit" className="auth-submit" disabled={isSubmitting}>
+            <div className="auth-actions auth-actions--center">
+              <Button type="submit" size="lg" isLoading={isSubmitting} loadingLabel="Signing in...">
                 Log In
-              </button>
-
-              <button type="button" className="auth-inline-link" onClick={() => setMode('forgot')}>
+              </Button>
+              <Button variant="link" onClick={() => switchMode('forgot')}>
                 Forgot password?
-              </button>
-
-              <p className="auth-switch-copy">
-                New user?{' '}
-                <button type="button" className="auth-text-link" onClick={() => setMode('signup')}>
-                  Sign up now
-                </button>
-              </p>
+              </Button>
             </div>
+
+            <p className="auth-switch">
+              New user?{' '}
+              <Button variant="link" onClick={() => switchMode('signup')}>
+                Sign up now
+              </Button>
+            </p>
           </form>
         )}
 
         {mode === 'signup' && (
-          <form onSubmit={handleSignup} className="auth-form">
-            <div className="auth-card__header auth-card__header--solid">
-              <h1>Sign up</h1>
-              <p>Your check-ins stay protected with encrypted transport and private account access.</p>
+          <form onSubmit={handleSignup} className="auth-card__body" noValidate>
+            {banner && <StatusBanner tone={banner.tone}>{banner.text}</StatusBanner>}
+
+            <FieldRow>
+              <Field
+                label="First Name"
+                autoComplete="given-name"
+                value={signupForm.firstName}
+                onChange={(event) => setSignupForm((prev) => ({ ...prev, firstName: event.target.value }))}
+                error={fieldErrors.firstName}
+                required
+              />
+              <Field
+                label="Last Name"
+                autoComplete="family-name"
+                value={signupForm.lastName}
+                onChange={(event) => setSignupForm((prev) => ({ ...prev, lastName: event.target.value }))}
+                error={fieldErrors.lastName}
+                required
+              />
+            </FieldRow>
+
+            <Callout tone="info">
+              This account needs to be in the name of whoever is receiving support.
+            </Callout>
+
+            <Field
+              label="Email"
+              type="email"
+              autoComplete="email"
+              value={signupForm.email}
+              onChange={(event) => setSignupForm((prev) => ({ ...prev, email: event.target.value }))}
+              error={fieldErrors.email}
+              required
+            />
+
+            <FieldRow>
+              <Field
+                label="Password"
+                type="password"
+                autoComplete="new-password"
+                hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+                value={signupForm.password}
+                onChange={(event) => setSignupForm((prev) => ({ ...prev, password: event.target.value }))}
+                error={fieldErrors.password}
+                required
+              />
+              <Field
+                label="Repeat Password"
+                type="password"
+                autoComplete="new-password"
+                value={signupForm.passwordConfirm}
+                onChange={(event) =>
+                  setSignupForm((prev) => ({ ...prev, passwordConfirm: event.target.value }))
+                }
+                error={fieldErrors.passwordConfirm}
+                required
+              />
+            </FieldRow>
+
+            <CheckboxField
+              checked={signupForm.agreeToTerms}
+              onChange={(event) => setSignupForm((prev) => ({ ...prev, agreeToTerms: event.target.checked }))}
+              label={
+                <>
+                  I agree to the Terms of Service and understand that MindGuard supports wellness
+                  check-ins and is not a substitute for emergency care or clinical treatment.
+                </>
+              }
+            />
+            {fieldErrors.agreeToTerms && (
+              <p className="auth-inline-error">{fieldErrors.agreeToTerms}</p>
+            )}
+
+            <div className="auth-actions auth-actions--split">
+              <p className="auth-switch">
+                Already have an account?{' '}
+                <Button variant="link" onClick={() => switchMode('login')}>
+                  Log in now
+                </Button>
+              </p>
+              <Button type="submit" size="lg" isLoading={isSubmitting} loadingLabel="Creating...">
+                Continue
+              </Button>
             </div>
 
-            <div className="auth-card__body">
-              {banner && <StatusBanner banner={banner} />}
-
-              <div className="auth-grid auth-grid--two">
-                <label className="auth-field">
-                  <span>First Name</span>
-                  <input
-                    type="text"
-                    value={signupForm.firstName}
-                    onChange={(event) => setSignupForm((prev) => ({ ...prev, firstName: event.target.value }))}
-                    className="auth-input"
-                    required
-                  />
-                </label>
-
-                <label className="auth-field">
-                  <span>Last Name</span>
-                  <input
-                    type="text"
-                    value={signupForm.lastName}
-                    onChange={(event) => setSignupForm((prev) => ({ ...prev, lastName: event.target.value }))}
-                    className="auth-input"
-                    required
-                  />
-                </label>
-              </div>
-
-              <div className="auth-note auth-note--info">
-                This account needs to be in the name of whoever is receiving support
-              </div>
-
-              <label className="auth-field">
-                <span>Email</span>
-                <input
-                  type="email"
-                  value={signupForm.email}
-                  onChange={(event) => setSignupForm((prev) => ({ ...prev, email: event.target.value }))}
-                  className="auth-input"
-                  required
-                />
-              </label>
-
-              <div className="auth-grid auth-grid--two">
-                <label className="auth-field">
-                  <span>Password</span>
-                  <input
-                    type="password"
-                    value={signupForm.password}
-                    onChange={(event) => setSignupForm((prev) => ({ ...prev, password: event.target.value }))}
-                    className="auth-input"
-                    required
-                  />
-                </label>
-
-                <label className="auth-field">
-                  <span>Repeat Password</span>
-                  <input
-                    type="password"
-                    value={signupForm.passwordConfirm}
-                    onChange={(event) => setSignupForm((prev) => ({ ...prev, passwordConfirm: event.target.value }))}
-                    className="auth-input"
-                    required
-                  />
-                </label>
-              </div>
-
-              <label className="auth-check">
-                <input
-                  type="checkbox"
-                  checked={signupForm.agreeToTerms}
-                  onChange={(event) => setSignupForm((prev) => ({ ...prev, agreeToTerms: event.target.checked }))}
-                />
-                <span>
-                  I agree to the Terms of Service and understand this app supports wellness check-ins, not emergency care.
-                </span>
-              </label>
-
-              <div className="auth-row auth-row--between">
-                <p className="auth-switch-copy">
-                  Already have an account?{' '}
-                  <button type="button" className="auth-text-link" onClick={() => setMode('login')}>
-                    Log in now
-                  </button>
-                </p>
-
-                <button type="submit" className="auth-submit auth-submit--right" disabled={isSubmitting}>
-                  Continue
-                </button>
-              </div>
-
-              <div className="auth-note auth-note--danger">
-                <div className="auth-note__title">
-                  <AlertTriangle size={16} />
-                  <span>If you are in a life threatening situation — don't use this site</span>
-                </div>
-                <p>Call or text 988 for immediate crisis support, call 911 or go to the nearest emergency room for immediate danger, and use SAMHSA's 1-800-662-HELP for treatment referrals.</p>
-              </div>
-            </div>
+            <Callout
+              tone="danger"
+              icon={AlertTriangle}
+              title="If you are in a life threatening situation — don't use this site"
+            >
+              <p>
+                Call or text <strong>988</strong> (Suicide &amp; Crisis Lifeline) for immediate
+                support, or call <strong>911</strong> / go to your nearest emergency room if you are
+                in immediate danger.
+              </p>
+              <p>
+                For treatment referrals, SAMHSA's National Helpline is{' '}
+                <strong>1-800-662-HELP (4357)</strong>, free and available 24/7.
+              </p>
+              <p>
+                Outside the US, find your local line at{' '}
+                <a href="https://findahelpline.com" target="_blank" rel="noreferrer">
+                  findahelpline.com
+                </a>
+                .
+              </p>
+            </Callout>
           </form>
         )}
 
         {mode === 'forgot' && (
-          <form onSubmit={handleForgot} className="auth-form">
-            <div className="auth-card__header auth-card__header--gradient">
-              <h1>Reset your password</h1>
-              <p>Enter your email and we will send a secure reset link if the account exists.</p>
-            </div>
+          <form onSubmit={handleForgot} className="auth-card__body" noValidate>
+            {banner && <StatusBanner tone={banner.tone}>{banner.text}</StatusBanner>}
 
-            <div className="auth-card__body">
-              {banner && <StatusBanner banner={banner} />}
+            <Field
+              label="Email"
+              type="email"
+              autoComplete="email"
+              value={forgotForm.email}
+              onChange={(event) => setForgotForm({ email: event.target.value })}
+              required
+            />
 
-              <label className="auth-field">
-                <span>Email</span>
-                <input
-                  type="email"
-                  value={forgotForm.email}
-                  onChange={(event) => setForgotForm({ email: event.target.value })}
-                  className="auth-input"
-                  required
-                />
-              </label>
-
-              <button type="submit" className="auth-submit" disabled={isSubmitting}>
+            <div className="auth-actions auth-actions--center">
+              <Button type="submit" size="lg" isLoading={isSubmitting} loadingLabel="Sending...">
                 Send reset link
-              </button>
-
-              <p className="auth-switch-copy">
-                Remembered it?{' '}
-                <button type="button" className="auth-text-link" onClick={() => setMode('login')}>
-                  Back to log in
-                </button>
-              </p>
+              </Button>
             </div>
+
+            <p className="auth-switch">
+              Remembered it?{' '}
+              <Button variant="link" onClick={() => switchMode('login')}>
+                Back to log in
+              </Button>
+            </p>
           </form>
         )}
 
         {mode === 'reset' && (
-          <form onSubmit={handleReset} className="auth-form">
-            <div className="auth-card__header auth-card__header--gradient">
-              <h1>Create a new password</h1>
-              <p>Use a password you have not used before and keep it private.</p>
-            </div>
+          <form onSubmit={handleReset} className="auth-card__body" noValidate>
+            {banner && <StatusBanner tone={banner.tone}>{banner.text}</StatusBanner>}
 
-            <div className="auth-card__body">
-              {banner && <StatusBanner banner={banner} />}
+            {!routeToken && (
+              <StatusBanner tone="error">
+                This reset link is missing its token. Request a new link from the login screen.
+              </StatusBanner>
+            )}
 
-              <div className="auth-grid auth-grid--two">
-                <label className="auth-field">
-                  <span>Password</span>
-                  <input
-                    type="password"
-                    value={resetForm.password}
-                    onChange={(event) => setResetForm((prev) => ({ ...prev, password: event.target.value }))}
-                    className="auth-input"
-                    required
-                  />
-                </label>
+            <FieldRow>
+              <Field
+                label="Password"
+                type="password"
+                autoComplete="new-password"
+                hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+                value={resetForm.password}
+                onChange={(event) => setResetForm((prev) => ({ ...prev, password: event.target.value }))}
+                error={fieldErrors.password}
+                required
+              />
+              <Field
+                label="Repeat Password"
+                type="password"
+                autoComplete="new-password"
+                value={resetForm.passwordConfirm}
+                onChange={(event) =>
+                  setResetForm((prev) => ({ ...prev, passwordConfirm: event.target.value }))
+                }
+                error={fieldErrors.passwordConfirm}
+                required
+              />
+            </FieldRow>
 
-                <label className="auth-field">
-                  <span>Repeat Password</span>
-                  <input
-                    type="password"
-                    value={resetForm.passwordConfirm}
-                    onChange={(event) => setResetForm((prev) => ({ ...prev, passwordConfirm: event.target.value }))}
-                    className="auth-input"
-                    required
-                  />
-                </label>
-              </div>
-
-              <button type="submit" className="auth-submit" disabled={isSubmitting || !routeToken}>
+            <div className="auth-actions auth-actions--center">
+              <Button
+                type="submit"
+                size="lg"
+                isLoading={isSubmitting}
+                loadingLabel="Updating..."
+                disabled={!routeToken}
+              >
                 Update password
-              </button>
-
-              <p className="auth-switch-copy">
-                Want to sign in instead?{' '}
-                <button type="button" className="auth-text-link" onClick={() => setMode('login')}>
-                  Back to log in
-                </button>
-              </p>
+              </Button>
             </div>
+
+            <p className="auth-switch">
+              Want to sign in instead?{' '}
+              <Button variant="link" onClick={() => switchMode('login')}>
+                Back to log in
+              </Button>
+            </p>
           </form>
         )}
       </div>
@@ -370,6 +423,26 @@ export default function AuthScreen({
   );
 }
 
-function StatusBanner({ banner }) {
-  return <div className={`auth-status auth-status--${banner.type}`}>{banner.text}</div>;
+function validateSignup(form) {
+  const errors = validatePasswordPair(form);
+
+  if (!form.firstName.trim()) errors.firstName = 'Required';
+  if (!form.lastName.trim()) errors.lastName = 'Required';
+  if (!/^\S+@\S+\.\S+$/.test(form.email)) errors.email = 'Enter a valid email address';
+  if (!form.agreeToTerms) errors.agreeToTerms = 'Please agree to the Terms of Service to continue.';
+
+  return errors;
+}
+
+function validatePasswordPair({ password, passwordConfirm }) {
+  const errors = {};
+
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    errors.password = `Use at least ${MIN_PASSWORD_LENGTH} characters`;
+  }
+  if (password !== passwordConfirm) {
+    errors.passwordConfirm = 'Passwords do not match';
+  }
+
+  return errors;
 }

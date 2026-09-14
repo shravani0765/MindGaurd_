@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, User, Bot, HeartPulse, ShieldCheck } from 'lucide-react';
 import { apiClient } from '../services/api';
 import { buildComfortResponse } from '../services/wellnessIntelligence';
+import { aiConfig } from '../services/aiConfig';
 
 export default function ChatInterface({ userId = null, onMoodLogged }) {
   const [messages, setMessages] = useState([
@@ -17,6 +18,9 @@ export default function ChatInterface({ userId = null, onMoodLogged }) {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
+  // Counts completed exchanges so the companion rotates its fillers and
+  // drops the archetype opener after the first reply.
+  const turnRef = useRef(0);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -42,13 +46,18 @@ export default function ChatInterface({ userId = null, onMoodLogged }) {
       const response = await apiClient.sendTextInteraction(userId, userText);
       const emotion = response.moodLog?.emotion || 'calm';
       const confidence = response.moodLog?.details?.confidence || 0.92;
+      const { archetypeId, regionId } = aiConfig.getCompanionProfile();
       const comfort = buildComfortResponse({
         text: userText,
         emotion,
         urgency: response.moodLog?.details?.urgency || 'normal',
         topicFlags: response.moodLog?.details?.topicFlags || {},
         mode: 'text',
+        archetypeId,
+        regionId,
+        turn: turnRef.current,
       });
+      turnRef.current += 1;
 
       if (onMoodLogged) onMoodLogged(response.moodLog);
 

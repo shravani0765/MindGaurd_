@@ -1,3 +1,11 @@
+import {
+  DEFAULT_ARCHETYPE_ID,
+  DEFAULT_REGION_ID,
+  applyPersonaVoice,
+  personaFollowUp,
+  regionalGrounding,
+} from './archetypes';
+
 const EMOTIONS = ['calm', 'happy', 'neutral', 'fatigued', 'anxious', 'stressed', 'sad'];
 
 const EMOTION_PATTERNS = {
@@ -169,7 +177,7 @@ export function fuseWellnessSignals({
   };
 }
 
-export function buildComfortResponse({
+function buildBaseComfortResponse({
   text: _text = '',
   emotion = 'neutral',
   urgency = 'normal',
@@ -246,6 +254,43 @@ export function buildComfortResponse({
     followUp,
     somaticAdvice,
   };
+}
+
+/**
+ * Builds the reply the companion actually says.
+ *
+ * The clinical content comes from `buildBaseComfortResponse`; the archetype and
+ * region only decide how it is opened, paced, and closed. A high-urgency reply
+ * is returned untouched so safety wording is identical for every user.
+ */
+export function buildComfortResponse({
+  archetypeId = DEFAULT_ARCHETYPE_ID,
+  regionId = DEFAULT_REGION_ID,
+  turn = 0,
+  ...signals
+}) {
+  const base = buildBaseComfortResponse(signals);
+  const urgency = signals.urgency || 'normal';
+
+  if (urgency === 'high') return base;
+
+  const normalizedEmotion = normalizeEmotion(signals.emotion);
+  // An opener re-states what the user is going through, which is grounding on a
+  // hard turn but patronising on a good one.
+  const withOpener = turn === 0 && !['happy', 'calm'].includes(normalizedEmotion);
+
+  return {
+    ...base,
+    message: applyPersonaVoice(base.message, { archetypeId, regionId, urgency, turn, withOpener }),
+    followUp: personaFollowUp(archetypeId, base.followUp),
+    somaticAdvice: shouldUseRegionalGrounding(normalizedEmotion, signals.topicFlags)
+      ? regionalGrounding(regionId)
+      : base.somaticAdvice,
+  };
+}
+
+function shouldUseRegionalGrounding(emotion, topicFlags = {}) {
+  return Boolean(topicFlags.grounding) || emotion === 'anxious' || emotion === 'stressed';
 }
 
 export function buildSomaticAdvice({ emotion = 'neutral', topicFlags = {}, tension = 20 }) {

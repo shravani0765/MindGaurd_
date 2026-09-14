@@ -2,6 +2,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Video, VideoOff, Camera, HeartPulse, ShieldCheck } from 'lucide-react';
 import { apiClient } from '../services/api';
+import { faceAnalyzer } from '../services/faceEmotionDetector';
 
 export default function VideoInterface({ isCamOn, onToggleCam, onMoodLogged, userId = null }) {
   const videoRef = useRef(null);
@@ -53,16 +54,22 @@ export default function VideoInterface({ isCamOn, onToggleCam, onMoodLogged, use
   };
 
   useEffect(() => {
-    if (!isCamOn) return;
+    if (!isCamOn) return undefined;
 
     const interval = setInterval(() => {
+      const reading = faceAnalyzer.analyzeVideoFrame(videoRef.current);
+      if (!reading) return;
+
+      // Smooth across readings so a single noisy frame does not make the
+      // on-screen meters jump.
       setFacialState((prev) => ({
-        ...prev,
-        tension: Math.max(10, Math.min(85, prev.tension + (Math.random() * 8 - 4))),
-        fatigue: Math.max(15, Math.min(80, prev.fatigue + (Math.random() * 6 - 3))),
-        valence: Math.max(30, Math.min(95, prev.valence + (Math.random() * 8 - 4))),
+        emotion: reading.emotion,
+        confidence: reading.confidence,
+        tension: prev.tension * 0.6 + reading.tension * 0.4,
+        fatigue: prev.fatigue * 0.6 + reading.fatigue * 0.4,
+        valence: prev.valence * 0.6 + reading.valence * 0.4,
       }));
-    }, 2500);
+    }, 1500);
 
     return () => clearInterval(interval);
   }, [isCamOn]);
@@ -78,9 +85,17 @@ export default function VideoInterface({ isCamOn, onToggleCam, onMoodLogged, use
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const base64Data = canvas.toDataURL('image/jpeg').split(',')[1];
+    // Prefer a live reading over the smoothed display state at capture time.
+    const reading = faceAnalyzer.analyzeVideoFrame(video) || facialState;
 
     try {
-      const response = await apiClient.sendVideoInteraction(userId, base64Data);
+      const response = await apiClient.sendVideoInteraction(userId, base64Data, {
+        emotion: reading.emotion,
+        tension: Math.round(reading.tension),
+        fatigue: Math.round(reading.fatigue),
+        valence: Math.round(reading.valence),
+        confidence: Number(reading.confidence.toFixed(2)),
+      });
       if (onMoodLogged) onMoodLogged(response.moodLog);
     } catch (error) {
       console.warn('Video interaction err:', error);

@@ -99,8 +99,19 @@ export const apiClient = {
     return { ...data, moodLog: normalizeMoodLog(data.moodLog) };
   },
 
-  async sendVoiceInteraction(userId, audioBase64) {
-    const payload = userId ? { userId, audioBase64 } : { audioBase64 };
+  /**
+   * @param {string} userId
+   * @param {string} audioBase64 Raw clip, only used when no transcript exists.
+   * @param {{transcript?: string, voiceFeatures?: Record<string, number>}} [signals]
+   */
+  async sendVoiceInteraction(userId, audioBase64, signals = {}) {
+    const payload = {
+      ...(userId ? { userId } : {}),
+      ...(audioBase64 ? { audioBase64 } : {}),
+      ...(signals.transcript ? { transcript: signals.transcript } : {}),
+      ...(signals.voiceFeatures ? { voiceFeatures: signals.voiceFeatures } : {}),
+    };
+
     const data = await requestJson(
       '/interactions/voice',
       {
@@ -109,15 +120,26 @@ export const apiClient = {
       },
       (error) => {
         console.warn('API error sending voice interaction:', error);
-        return mockAnalysis('voice', '', userId);
+        return mockAnalysis('voice', signals.transcript || '', userId);
       }
     );
 
     return { ...data, moodLog: normalizeMoodLog(data.moodLog) };
   },
 
-  async sendVideoInteraction(userId, videoBase64) {
-    const payload = userId ? { userId, videoBase64 } : { videoBase64 };
+  /**
+   * @param {string} userId
+   * @param {string} videoBase64
+   * @param {Record<string, number|string>} [facialSignals] Measurements from the
+   *   client-side frame analyser. The server scores these rather than the image.
+   */
+  async sendVideoInteraction(userId, videoBase64, facialSignals = null) {
+    const payload = {
+      ...(userId ? { userId } : {}),
+      ...(videoBase64 ? { videoBase64 } : {}),
+      ...(facialSignals ? { facialSignals } : {}),
+    };
+
     const data = await requestJson(
       '/interactions/video',
       {

@@ -196,3 +196,389 @@ class WellnessApiTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 400)
+
+
+@override_settings(DEBUG=True, FRONTEND_URL="http://127.0.0.1:5173", OPENAI_API_KEY="")
+class AuthFailureTests(TestCase):
+    """Covers the ways authentication is expected to be refused."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.post(
+            "/api/auth/register",
+            {
+                "firstName": "Ada",
+                "lastName": "Lovelace",
+                "email": "ada@example.com",
+                "password": "strongpass123",
+                "passwordConfirm": "strongpass123",
+                "agreeToTerms": True,
+            },
+            format="json",
+        )
+        user = MindGuardUser.objects.get(email="ada@example.com")
+        user.is_verified = True
+        user.save(update_fields=["is_verified"])
+        self.user = user
+
+    def _login(self):
+        response = self.client.post(
+            "/api/auth/login",
+            {"email": "ada@example.com", "password": "strongpass123"},
+            format="json",
+        )
+        return response.json()["authToken"]
+
+    def test_login_with_wrong_password_is_rejected(self):
+        response = self.client.post(
+            "/api/auth/login",
+            {"email": "ada@example.com", "password": "wrongpassword1"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertNotIn("authToken", response.json())
+
+    def test_login_with_unknown_email_does_not_reveal_account_existence(self):
+        response = self.client.post(
+            "/api/auth/login",
+            {"email": "nobody@example.com", "password": "strongpass123"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["message"], "Invalid credentials")
+
+    def test_duplicate_registration_is_rejected(self):
+        response = self.client.post(
+            "/api/auth/register",
+            {
+                "firstName": "Ada",
+                "lastName": "Lovelace",
+                "email": "ada@example.com",
+                "password": "strongpass123",
+                "passwordConfirm": "strongpass123",
+                "agreeToTerms": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 409)
+
+    def test_registration_rejects_short_password(self):
+        response = self.client.post(
+            "/api/auth/register",
+            {
+                "firstName": "Bob",
+                "lastName": "Short",
+                "email": "bob@example.com",
+                "password": "tiny",
+                "passwordConfirm": "tiny",
+                "agreeToTerms": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(MindGuardUser.objects.filter(email="bob@example.com").exists())
+
+    def test_garbage_bearer_token_is_rejected(self):
+        self.client.credentials(HTTP_AUTHORIZATION="Bearer not-a-real-token")
+        self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
+
+    def test_tampered_bearer_token_is_rejected(self):
+        token = self._login()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}x")
+        self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
+
+    def test_refresh_token_cannot_be_used_as_an_access_token(self):
+        login = self.client.post(
+            "/api/auth/login",
+            {"email": "ada@example.com", "password": "strongpass123"},
+            format="json",
+        ).json()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login['refreshToken']}")
+        self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
+
+    def test_malformed_authorization_header_is_ignored(self):
+        self.client.credentials(HTTP_AUTHORIZATION="Token abc123")
+        self.assertEqual(self.client.get("/api/auth/me").status_code, 401)
+
+    def test_protected_endpoints_require_authentication(self):
+        for path in ("/api/mood/history", "/api/mood/burnout-risk", "/api/mood"):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 401)
+
+    def test_password_reset_for_unknown_email_does_not_leak(self):
+        response = self.client.post(
+            "/api/auth/password-reset/request",
+            {"email": "nobody@example.com"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("resetUrl", response.json())
+
+    def test_password_reset_rejects_tampered_token(self):
+        response = self.client.post(
+            "/api/auth/password-reset/confirm",
+            {"token": "forged-token", "password": "newpass456", "passwordConfirm": "newpass456"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_password_reset_rejects_mismatched_passwords(self):
+        reset_url = self.client.post(
+            "/api/auth/password-reset/request",
+            {"email": "ada@example.com"},
+            format="json",
+        ).json()["resetUrl"]
+
+        response = self.client.post(
+            "/api/auth/password-reset/confirm",
+            {
+                "token": reset_url.split("token=")[-1],
+                "password": "newpass456",
+                "passwordConfirm": "differentpass789",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_verify_endpoint_rejects_missing_and_invalid_tokens(self):
+        self.assertEqual(self.client.get("/api/auth/verify").status_code, 400)
+        self.assertEqual(self.client.get("/api/auth/verify", {"token": "bogus"}).status_code, 400)
+
+    def test_cannot_write_a_mood_entry_as_another_user(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self._login()}")
+        other = MindGuardUser.objects.create(
+            email="other@example.com",
+            first_name="Other",
+            last_name="User",
+            name="Other User",
+            password_hash="noop",
+            is_verified=True,
+        )
+        response = self.client.post(
+            "/api/mood",
+            {"userId": str(other.external_id), "emotion": "calm", "sourceMode": "text"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(other.mood_logs.count(), 0)
+
+
+@override_settings(DEBUG=True, FRONTEND_URL="http://127.0.0.1:5173", OPENAI_API_KEY="")
+class NotificationFlowTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.post(
+            "/api/auth/register",
+            {
+                "firstName": "Grace",
+                "lastName": "Hopper",
+                "email": "grace@example.com",
+                "password": "strongpass123",
+                "passwordConfirm": "strongpass123",
+                "agreeToTerms": True,
+            },
+            format="json",
+        )
+        user = MindGuardUser.objects.get(email="grace@example.com")
+        user.is_verified = True
+        user.save(update_fields=["is_verified"])
+        self.user = user
+
+        token = self.client.post(
+            "/api/auth/login",
+            {"email": "grace@example.com", "password": "strongpass123"},
+            format="json",
+        ).json()["authToken"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    def test_register_token_requires_authentication(self):
+        anonymous = APIClient()
+        response = anonymous.post(
+            "/api/notifications/register-token",
+            {"expoPushToken": "ExponentPushToken[sample]"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_register_token_rejects_missing_token_field(self):
+        response = self.client.post("/api/notifications/register-token", {}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_alert_without_registered_push_token_returns_not_found(self):
+        response = self.client.post(
+            "/api/notifications/send-alert",
+            {"title": "Take a breath", "body": "Step away for two minutes."},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_alert_requires_title_and_body(self):
+        self.client.post(
+            "/api/notifications/register-token",
+            {"expoPushToken": "ExponentPushToken[sample]"},
+            format="json",
+        )
+        response = self.client.post("/api/notifications/send-alert", {"title": "Only a title"}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_register_token_overwrites_previous_token(self):
+        self.client.post(
+            "/api/notifications/register-token",
+            {"expoPushToken": "ExponentPushToken[first]"},
+            format="json",
+        )
+        self.client.post(
+            "/api/notifications/register-token",
+            {"expoPushToken": "ExponentPushToken[second]"},
+            format="json",
+        )
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.expo_push_token, "ExponentPushToken[second]")
+
+    def test_cannot_send_an_alert_to_another_user(self):
+        other = MindGuardUser.objects.create(
+            email="target@example.com",
+            password_hash="noop",
+            is_verified=True,
+            expo_push_token="ExponentPushToken[target]",
+        )
+        response = self.client.post(
+            "/api/notifications/send-alert",
+            {"userId": str(other.external_id), "title": "Hello", "body": "There"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+
+@override_settings(DEBUG=True, FRONTEND_URL="http://127.0.0.1:5173", OPENAI_API_KEY="")
+class InteractionValidationTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.post(
+            "/api/auth/register",
+            {
+                "firstName": "Alan",
+                "lastName": "Turing",
+                "email": "alan@example.com",
+                "password": "strongpass123",
+                "passwordConfirm": "strongpass123",
+                "agreeToTerms": True,
+            },
+            format="json",
+        )
+        user = MindGuardUser.objects.get(email="alan@example.com")
+        user.is_verified = True
+        user.save(update_fields=["is_verified"])
+
+        token = self.client.post(
+            "/api/auth/login",
+            {"email": "alan@example.com", "password": "strongpass123"},
+            format="json",
+        ).json()["authToken"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    def test_text_interaction_rejects_blank_and_whitespace_only_input(self):
+        for payload in ({}, {"text": ""}, {"text": "   "}):
+            with self.subTest(payload=payload):
+                response = self.client.post("/api/interactions/text", payload, format="json")
+                self.assertEqual(response.status_code, 400)
+
+    def test_voice_interaction_requires_at_least_one_signal(self):
+        response = self.client.post("/api/interactions/voice", {}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_voice_interaction_uses_the_transcript_when_present(self):
+        response = self.client.post(
+            "/api/interactions/voice",
+            {"transcript": "I am completely exhausted and drained today"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        mood_log = response.json()["moodLog"]
+        self.assertEqual(mood_log["emotion"], "fatigued")
+        self.assertEqual(mood_log["sourceMode"], "voice")
+        # The transcript path must run through the text pipeline, not a guess.
+        self.assertNotEqual(mood_log["details"]["analysisEngine"], "unscored")
+
+    def test_voice_interaction_rejects_non_numeric_features(self):
+        response = self.client.post(
+            "/api/interactions/voice",
+            {"transcript": "hello there", "voiceFeatures": {"energy": "loud"}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_voice_interaction_without_transcript_is_marked_unscored(self):
+        response = self.client.post(
+            "/api/interactions/voice",
+            {"audioBase64": "AAAAAAAAAAAAAAAAAAAA"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        details = response.json()["moodLog"]["details"]
+        self.assertTrue(details["unscored"])
+        self.assertEqual(details["confidenceBand"], "low")
+
+    def test_video_interaction_requires_signals_or_frame(self):
+        response = self.client.post("/api/interactions/video", {}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_video_interaction_scores_facial_signals(self):
+        response = self.client.post(
+            "/api/interactions/video",
+            {"facialSignals": {"emotion": "stressed", "tension": 88, "fatigue": 30, "valence": 25}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        mood_log = response.json()["moodLog"]
+        self.assertEqual(mood_log["emotion"], "stressed")
+        self.assertEqual(mood_log["details"]["analysisEngine"], "facial-signal-fusion-v1")
+        self.assertEqual(mood_log["details"]["signals"]["tension"], 88)
+
+    def test_video_interaction_rejects_a_non_object_signal_map(self):
+        response = self.client.post(
+            "/api/interactions/video",
+            {"facialSignals": ["stressed", 88]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_video_interaction_rejects_an_oversized_signal_map(self):
+        response = self.client.post(
+            "/api/interactions/video",
+            {"facialSignals": {f"key{index}": index for index in range(25)}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_unknown_emotion_in_facial_signals_is_ignored_not_stored(self):
+        response = self.client.post(
+            "/api/interactions/video",
+            {"facialSignals": {"emotion": "elated", "tension": 10, "fatigue": 10, "valence": 95}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(response.json()["moodLog"]["emotion"], ("happy", "calm"))
+
+    def test_mood_entry_rejects_an_unknown_source_mode_and_blank_emotion(self):
+        for payload in (
+            {"emotion": "calm", "sourceMode": "telepathy"},
+            {"emotion": "", "sourceMode": "text"},
+            {"sourceMode": "text"},
+        ):
+            with self.subTest(payload=payload):
+                response = self.client.post("/api/mood", payload, format="json")
+                self.assertEqual(response.status_code, 400)
+
+    def test_unscored_entries_do_not_inflate_the_burnout_score(self):
+        baseline = self.client.get("/api/mood/burnout-risk").json()["burnoutRisk"]
+        for _ in range(3):
+            self.client.post(
+                "/api/interactions/voice",
+                {"audioBase64": "AAAAAAAAAAAAAAAAAAAA"},
+                format="json",
+            )
+        after = self.client.get("/api/mood/burnout-risk").json()["burnoutRisk"]
+        # Neutral, low-confidence entries should keep the score in the "Low" band.
+        self.assertLess(after, 45)
+        self.assertLessEqual(abs(after - baseline), 25)

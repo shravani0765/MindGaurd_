@@ -1,6 +1,9 @@
 // web/src/services/aiConfig.js
 // Persistent configuration management for AI Engine, Gemini API, Personas, and Speech settings
 
+import { DEFAULT_PERSONA_ID, VOICE_PERSONAS } from './kokoroEngine';
+import { ARCHETYPES, DEFAULT_ARCHETYPE_ID, DEFAULT_REGION_ID, REGIONS } from './archetypes';
+
 export const AI_PERSONAS = {
   empathetic: {
     id: 'empathetic',
@@ -38,6 +41,11 @@ const STORAGE_KEYS = {
   MODEL: 'mindguard_gemini_model', // 'gemini-1.5-flash' | 'gemini-2.0-flash'
   PERSONA: 'mindguard_ai_persona',
   SPEECH_PAUSE_MS: 'mindguard_speech_pause_ms',
+  VOICE_PERSONA: 'mindguard_voice_persona',
+  TTS_ENGINE: 'mindguard_tts_engine', // 'neural' | 'browser'
+  ARCHETYPE: 'mindguard_user_archetype',
+  REGION: 'mindguard_user_region',
+  ONBOARDED: 'mindguard_onboarding_complete',
 };
 
 class AIConfigService {
@@ -112,6 +120,83 @@ class AIConfigService {
   setSpeechPauseMs(ms) {
     if (typeof window === 'undefined') return;
     localStorage.setItem(STORAGE_KEYS.SPEECH_PAUSE_MS, ms.toString());
+    this.notify();
+  }
+
+  getVoicePersona() {
+    if (typeof window === 'undefined') return DEFAULT_PERSONA_ID;
+    const stored = localStorage.getItem(STORAGE_KEYS.VOICE_PERSONA);
+    return VOICE_PERSONAS[stored] ? stored : DEFAULT_PERSONA_ID;
+  }
+
+  setVoicePersona(personaId) {
+    if (typeof window === 'undefined' || !VOICE_PERSONAS[personaId]) return;
+    localStorage.setItem(STORAGE_KEYS.VOICE_PERSONA, personaId);
+    this.notify();
+  }
+
+  getTtsEngine() {
+    if (typeof window === 'undefined') return 'neural';
+    return localStorage.getItem(STORAGE_KEYS.TTS_ENGINE) === 'browser' ? 'browser' : 'neural';
+  }
+
+  setTtsEngine(engine) {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(STORAGE_KEYS.TTS_ENGINE, engine === 'browser' ? 'browser' : 'neural');
+    this.notify();
+  }
+
+  getArchetype() {
+    if (typeof window === 'undefined') return DEFAULT_ARCHETYPE_ID;
+    const stored = localStorage.getItem(STORAGE_KEYS.ARCHETYPE);
+    return ARCHETYPES[stored] ? stored : DEFAULT_ARCHETYPE_ID;
+  }
+
+  setArchetype(archetypeId) {
+    if (typeof window === 'undefined' || !ARCHETYPES[archetypeId]) return;
+    localStorage.setItem(STORAGE_KEYS.ARCHETYPE, archetypeId);
+    this.notify();
+  }
+
+  getRegion() {
+    if (typeof window === 'undefined') return DEFAULT_REGION_ID;
+    const stored = localStorage.getItem(STORAGE_KEYS.REGION);
+    return REGIONS[stored] ? stored : DEFAULT_REGION_ID;
+  }
+
+  setRegion(regionId) {
+    if (typeof window === 'undefined' || !REGIONS[regionId]) return;
+    localStorage.setItem(STORAGE_KEYS.REGION, regionId);
+    this.notify();
+  }
+
+  /** The bundle every voice/reasoning call needs, resolved in one read. */
+  getCompanionProfile() {
+    return {
+      archetypeId: this.getArchetype(),
+      regionId: this.getRegion(),
+      personaId: this.getVoicePersona(),
+      engine: this.getTtsEngine(),
+    };
+  }
+
+  isOnboarded() {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem(STORAGE_KEYS.ONBOARDED) === 'true';
+  }
+
+  completeOnboarding({ archetypeId, regionId, personaId } = {}) {
+    if (typeof window === 'undefined') return;
+    if (archetypeId) this.setArchetype(archetypeId);
+    if (regionId) this.setRegion(regionId);
+    if (personaId) this.setVoicePersona(personaId);
+    localStorage.setItem(STORAGE_KEYS.ONBOARDED, 'true');
+    this.notify();
+  }
+
+  resetOnboarding() {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(STORAGE_KEYS.ONBOARDED);
     this.notify();
   }
 
