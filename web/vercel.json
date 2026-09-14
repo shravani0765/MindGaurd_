@@ -5,6 +5,10 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://mindguard-django-api.onrender.com/api/:path*"
+    },
+    {
       "source": "/verify-email",
       "destination": "/index.html"
     },
