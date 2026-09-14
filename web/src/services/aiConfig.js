@@ -3,6 +3,7 @@
 
 import { DEFAULT_PERSONA_ID, VOICE_PERSONAS } from './kokoroEngine';
 import { ARCHETYPES, DEFAULT_ARCHETYPE_ID, DEFAULT_REGION_ID, REGIONS } from './archetypes';
+import { DEFAULT_LANGUAGE_ID, DEFAULT_SLANG_LEVEL, LANGUAGES } from './vernacular';
 
 export const AI_PERSONAS = {
   empathetic: {
@@ -46,6 +47,8 @@ const STORAGE_KEYS = {
   ARCHETYPE: 'mindguard_user_archetype',
   REGION: 'mindguard_user_region',
   ONBOARDED: 'mindguard_onboarding_complete',
+  LANGUAGE: 'mindguard_vernacular_language',
+  SLANG_LEVEL: 'mindguard_slang_level',
 };
 
 class AIConfigService {
@@ -170,6 +173,31 @@ class AIConfigService {
     this.notify();
   }
 
+  getLanguage() {
+    if (typeof window === 'undefined') return DEFAULT_LANGUAGE_ID;
+    const stored = localStorage.getItem(STORAGE_KEYS.LANGUAGE);
+    return LANGUAGES[stored] ? stored : DEFAULT_LANGUAGE_ID;
+  }
+
+  setLanguage(languageId) {
+    if (typeof window === 'undefined' || !LANGUAGES[languageId]) return;
+    localStorage.setItem(STORAGE_KEYS.LANGUAGE, languageId);
+    this.notify();
+  }
+
+  /** Warmth slider position, 0 (formal) to 100 (home comfort). */
+  getSlangLevel() {
+    if (typeof window === 'undefined') return DEFAULT_SLANG_LEVEL;
+    const value = parseInt(localStorage.getItem(STORAGE_KEYS.SLANG_LEVEL), 10);
+    return Number.isNaN(value) ? DEFAULT_SLANG_LEVEL : Math.max(0, Math.min(100, value));
+  }
+
+  setSlangLevel(level) {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(STORAGE_KEYS.SLANG_LEVEL, String(Math.max(0, Math.min(100, Number(level) || 0))));
+    this.notify();
+  }
+
   /** The bundle every voice/reasoning call needs, resolved in one read. */
   getCompanionProfile() {
     return {
@@ -177,6 +205,8 @@ class AIConfigService {
       regionId: this.getRegion(),
       personaId: this.getVoicePersona(),
       engine: this.getTtsEngine(),
+      languageId: this.getLanguage(),
+      slangLevel: this.getSlangLevel(),
     };
   }
 
@@ -185,11 +215,13 @@ class AIConfigService {
     return localStorage.getItem(STORAGE_KEYS.ONBOARDED) === 'true';
   }
 
-  completeOnboarding({ archetypeId, regionId, personaId } = {}) {
+  completeOnboarding({ archetypeId, regionId, personaId, languageId, slangLevel } = {}) {
     if (typeof window === 'undefined') return;
     if (archetypeId) this.setArchetype(archetypeId);
     if (regionId) this.setRegion(regionId);
     if (personaId) this.setVoicePersona(personaId);
+    if (languageId) this.setLanguage(languageId);
+    if (slangLevel !== undefined) this.setSlangLevel(slangLevel);
     localStorage.setItem(STORAGE_KEYS.ONBOARDED, 'true');
     this.notify();
   }

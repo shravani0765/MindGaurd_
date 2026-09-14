@@ -5,6 +5,7 @@ import {
   personaFollowUp,
   regionalGrounding,
 } from './archetypes';
+import { DEFAULT_LANGUAGE_ID, DEFAULT_SLANG_LEVEL, injectVernacular, vernacularInvite } from './vernacular';
 
 const EMOTIONS = ['calm', 'happy', 'neutral', 'fatigued', 'anxious', 'stressed', 'sad'];
 
@@ -266,24 +267,37 @@ function buildBaseComfortResponse({
 export function buildComfortResponse({
   archetypeId = DEFAULT_ARCHETYPE_ID,
   regionId = DEFAULT_REGION_ID,
+  languageId = DEFAULT_LANGUAGE_ID,
+  slangLevel = DEFAULT_SLANG_LEVEL,
   turn = 0,
   ...signals
 }) {
   const base = buildBaseComfortResponse(signals);
   const urgency = signals.urgency || 'normal';
+  const topicFlags = signals.topicFlags || {};
 
-  if (urgency === 'high') return base;
+  // Crisis replies are returned verbatim: no archetype opener, no vernacular
+  // warmth, no re-pacing. Safety wording is identical for every user.
+  if (urgency === 'high' || topicFlags.selfHarm) return base;
 
   const normalizedEmotion = normalizeEmotion(signals.emotion);
   // An opener re-states what the user is going through, which is grounding on a
   // hard turn but patronising on a good one.
   const withOpener = turn === 0 && !['happy', 'calm'].includes(normalizedEmotion);
 
+  const personaMessage = applyPersonaVoice(base.message, {
+    archetypeId,
+    regionId,
+    urgency,
+    turn,
+    withOpener,
+  });
+
   return {
     ...base,
-    message: applyPersonaVoice(base.message, { archetypeId, regionId, urgency, turn, withOpener }),
-    followUp: personaFollowUp(archetypeId, base.followUp),
-    somaticAdvice: shouldUseRegionalGrounding(normalizedEmotion, signals.topicFlags)
+    message: injectVernacular(personaMessage, { languageId, slangLevel, urgency, topicFlags, turn }),
+    followUp: vernacularInvite(languageId, slangLevel, turn) || personaFollowUp(archetypeId, base.followUp),
+    somaticAdvice: shouldUseRegionalGrounding(normalizedEmotion, topicFlags)
       ? regionalGrounding(regionId)
       : base.somaticAdvice,
   };

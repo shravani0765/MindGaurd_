@@ -46,7 +46,7 @@ export default function ChatInterface({ userId = null, onMoodLogged }) {
       const response = await apiClient.sendTextInteraction(userId, userText);
       const emotion = response.moodLog?.emotion || 'calm';
       const confidence = response.moodLog?.details?.confidence || 0.92;
-      const { archetypeId, regionId } = aiConfig.getCompanionProfile();
+      const { archetypeId, regionId, languageId, slangLevel } = aiConfig.getCompanionProfile();
       const comfort = buildComfortResponse({
         text: userText,
         emotion,
@@ -55,6 +55,8 @@ export default function ChatInterface({ userId = null, onMoodLogged }) {
         mode: 'text',
         archetypeId,
         regionId,
+        languageId,
+        slangLevel,
         turn: turnRef.current,
       });
       turnRef.current += 1;

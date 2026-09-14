@@ -15,12 +15,13 @@ import RecoveryGuidePanel from './components/RecoveryGuidePanel';
 import AuthScreen from './components/AuthScreen';
 import OnboardingScreen from './components/OnboardingScreen';
 import VoiceStudioModal from './components/VoiceStudioModal';
-import { ambianceEngine } from './services/audioAmbiance';
 import { Music, X } from 'lucide-react';
 import { apiClient } from './services/api';
 import { clearStoredSession, loadStoredSession, saveStoredSession } from './services/authSession';
 import { aiConfig } from './services/aiConfig';
 import { speechService } from './services/speech';
+import { anchorReminder, engageComfortLayer, loadComfortProfile, releaseComfortLayer } from './services/comfortProfile';
+import { sanctuaryTheme } from './services/sanctuaryTheme';
 
 const EMPTY_SNAPSHOT = {
   burnoutRisk: 28,
@@ -48,6 +49,7 @@ export default function App() {
   const [isVoiceStudioOpen, setIsVoiceStudioOpen] = useState(false);
   const [isOnboarded, setIsOnboarded] = useState(() => aiConfig.isOnboarded());
   const [interventionToast, setInterventionToast] = useState(null);
+  const [sanctuaryMode, setSanctuaryMode] = useState('default');
 
   const activeUserId = session?.user?.id || null;
   const burnoutScore = burnoutSnapshot.burnoutRisk;
@@ -104,6 +106,11 @@ export default function App() {
     void refreshInsights(activeUserId);
   }, [activeUserId]);
 
+  useEffect(() => {
+    setSanctuaryMode(sanctuaryTheme.restore());
+    return sanctuaryTheme.subscribe(setSanctuaryMode);
+  }, []);
+
   // Start fetching the neural voice weights as soon as the user is in the app,
   // so the first spoken reply does not stall behind a cold download.
   useEffect(() => {
@@ -147,13 +154,16 @@ export default function App() {
       return nextHistory;
     });
 
-    if (normalizedEntry.emotion === 'stressed' || normalizedEntry.emotion === 'anxious') {
-      ambianceEngine.triggerBurnoutIntervention();
-      setInterventionToast('MindGuard detected elevated stress. Auto-playing a gentle restorative soundscape to ease the transition.');
-      setTimeout(() => setInterventionToast(null), 7000);
+    if (DISTRESS_EMOTIONS.includes(normalizedEntry.emotion)) {
+      engageComfortLayer(loadComfortProfile());
+      sanctuaryTheme.engageForDistress();
+      setInterventionToast(describeComfortLayer());
+      setTimeout(() => setInterventionToast(null), 9000);
     }
 
     if (normalizedEntry.emotion === 'happy' || normalizedEntry.emotion === 'calm') {
+      // Coming back up is the moment to hand the room back to the user.
+      sanctuaryTheme.releaseAutomatic();
       setInterventionToast('A positive signal was logged. This is a good moment to preserve the routine that helped you feel steadier.');
       setTimeout(() => setInterventionToast(null), 5000);
     }
@@ -175,6 +185,8 @@ export default function App() {
 
   const handleLogout = async () => {
     speechService.stopSpeaking();
+    releaseComfortLayer();
+    sanctuaryTheme.releaseAutomatic();
 
     try {
       await apiClient.logout();
@@ -232,6 +244,8 @@ export default function App() {
         userName={session.user?.firstName || session.user?.name}
         onLogout={handleLogout}
         onOpenVoiceStudio={() => setIsVoiceStudioOpen(true)}
+        sanctuaryMode={sanctuaryMode}
+        onToggleSanctuary={() => sanctuaryTheme.toggle()}
       />
 
       {interventionToast && (
@@ -340,6 +354,29 @@ export default function App() {
       <VoiceStudioModal isOpen={isVoiceStudioOpen} onClose={() => setIsVoiceStudioOpen(false)} />
     </div>
   );
+}
+
+// Emotions that should dim the room and bring the comfort layer in.
+const DISTRESS_EMOTIONS = ['stressed', 'anxious', 'sad', 'fatigued'];
+
+/**
+ * Describes what the comfort layer actually started, so the toast never claims
+ * to have played a track the user never configured.
+ */
+function describeComfortLayer() {
+  const profile = loadComfortProfile();
+  const parts = ['MindGuard noticed the strain and dimmed the room.'];
+
+  if (profile.comfortTrackUrl) {
+    parts.push('Your comfort track and soundscape are playing softly underneath.');
+  } else {
+    parts.push('A gentle soundscape is playing underneath.');
+  }
+
+  const anchor = anchorReminder(profile);
+  if (anchor) parts.push(anchor);
+
+  return parts.join(' ');
 }
 
 function getRouteInfo() {

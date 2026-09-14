@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Check, Cpu, Download, Volume2, X, Zap } from 'lucide-react';
 import { Badge, Button, Callout, OptionCard, StatusBanner } from './ui';
+import WarmthSlider from './WarmthSlider';
 import { aiConfig } from '../services/aiConfig';
 import { ARCHETYPES, REGIONS } from '../services/archetypes';
 import { VOICE_PERSONAS, kokoroEngine } from '../services/kokoroEngine';
 import { speechService } from '../services/speech';
+import { LANGUAGES, VERNACULAR_SPEECH_NOTE, speechTargetFor } from '../services/vernacular';
 
 const ENGINE_OPTIONS = [
   {
@@ -32,6 +34,8 @@ export default function VoiceStudioModal({ isOpen, onClose }) {
   const [regionId, setRegionId] = useState(() => aiConfig.getRegion());
   const [engineState, setEngineState] = useState(() => kokoroEngine.getState());
   const [previewingId, setPreviewingId] = useState(null);
+  const [languageId, setLanguageId] = useState(() => aiConfig.getLanguage());
+  const [slangLevel, setSlangLevel] = useState(() => aiConfig.getSlangLevel());
 
   useEffect(() => kokoroEngine.subscribe(setEngineState), []);
 
@@ -43,6 +47,8 @@ export default function VoiceStudioModal({ isOpen, onClose }) {
     setPersonaId(aiConfig.getVoicePersona());
     setArchetypeId(aiConfig.getArchetype());
     setRegionId(aiConfig.getRegion());
+    setLanguageId(aiConfig.getLanguage());
+    setSlangLevel(aiConfig.getSlangLevel());
   }, [isOpen]);
 
   useEffect(() => {
@@ -77,13 +83,23 @@ export default function VoiceStudioModal({ isOpen, onClose }) {
     aiConfig.setRegion(value);
   };
 
+  const applyLanguage = (value) => {
+    setLanguageId(value);
+    aiConfig.setLanguage(value);
+  };
+
+  const applySlangLevel = (value) => {
+    setSlangLevel(value);
+    aiConfig.setSlangLevel(value);
+  };
+
   const preview = (id) => {
     applyPersona(id);
     setPreviewingId(id);
     speechService.speak(
       `This is ${VOICE_PERSONAS[id].label}. ${REGIONS[regionId].affirmations[0]} Let's take one slow breath together.`,
       () => setPreviewingId(null),
-      { personaId: id, emotion: 'calm' }
+      { personaId: id, emotion: 'calm', languageId }
     );
   };
 
@@ -161,6 +177,31 @@ export default function VoiceStudioModal({ isOpen, onClose }) {
           </section>
 
           <section className="voice-studio__section">
+            <h3>Language &amp; warmth</h3>
+            <div className="ui-option-grid ui-option-grid--two">
+              {Object.values(LANGUAGES).map((language) => {
+                const target = speechTargetFor(language.id);
+                const speakable = target.neuralCapable || speechService.hasVoiceFor(target.locale);
+                return (
+                  <OptionCard
+                    key={language.id}
+                    name="language-studio"
+                    value={language.id}
+                    checked={languageId === language.id}
+                    onChange={applyLanguage}
+                    glyph={language.glyph}
+                    label={language.label}
+                    meta={speakable ? 'Can be spoken' : 'Text only on this device'}
+                  />
+                );
+              })}
+            </div>
+
+            <WarmthSlider value={slangLevel} onChange={applySlangLevel} languageId={languageId} />
+            <Callout tone="muted">{VERNACULAR_SPEECH_NOTE}</Callout>
+          </section>
+
+          <section className="voice-studio__section">
             <h3>How it should talk to you</h3>
             <div className="ui-option-grid">
               {Object.values(ARCHETYPES).map((archetype) => (
@@ -197,8 +238,8 @@ export default function VoiceStudioModal({ isOpen, onClose }) {
           </section>
 
           <Callout tone="muted">
-            Tone and region change the wording of everyday replies only. Crisis guidance is never
-            re-paced or softened — it is delivered identically for everyone.
+            Tone, language, and warmth change the wording of everyday replies only. Crisis guidance is
+            never re-paced, translated, or made casual — it is delivered identically for everyone.
           </Callout>
         </div>
       </div>

@@ -70,7 +70,7 @@ export default function VoiceAssistantOrb({
       const emotion = response.moodLog?.emotion || 'calm';
       const confidence = response.moodLog?.details?.confidence || 0.92;
       const urgency = response.moodLog?.details?.urgency || 'normal';
-      const { archetypeId, regionId } = aiConfig.getCompanionProfile();
+      const { archetypeId, regionId, languageId, slangLevel } = aiConfig.getCompanionProfile();
       const comfort = buildComfortResponse({
         text: userText,
         emotion,
@@ -79,6 +79,8 @@ export default function VoiceAssistantOrb({
         mode: 'voice',
         archetypeId,
         regionId,
+        languageId,
+        slangLevel,
         turn: turnRef.current,
       });
       turnRef.current += 1;
@@ -103,7 +105,7 @@ export default function VoiceAssistantOrb({
             setOrbState('idle');
           }
         },
-        { emotion, urgency }
+        { emotion, urgency, languageId }
       );
     } catch (e) {
       console.error('Error handling voice:', e);

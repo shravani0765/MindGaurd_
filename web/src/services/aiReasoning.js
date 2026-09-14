@@ -5,6 +5,7 @@ import {
 } from './wellnessIntelligence';
 import { aiConfig } from './aiConfig';
 import { buildPersonaPrompt, getArchetype, getRegion } from './archetypes';
+import { getLanguage, tierForLevel } from './vernacular';
 
 class MultimodalAIReasoning {
   constructor() {
@@ -34,7 +35,7 @@ class MultimodalAIReasoning {
     });
 
     const turn = this.turnIndex;
-    const { archetypeId, regionId } = aiConfig.getCompanionProfile();
+    const { archetypeId, regionId, languageId, slangLevel } = aiConfig.getCompanionProfile();
 
     this.conversationHistory.push({
       role: 'user',
@@ -52,6 +53,8 @@ class MultimodalAIReasoning {
       mode: 'combo',
       archetypeId,
       regionId,
+      languageId,
+      slangLevel,
       turn,
     });
     const response = `${comfort.message} ${comfort.followUp}`.trim();
@@ -64,6 +67,7 @@ class MultimodalAIReasoning {
       response,
       archetype: getArchetype(archetypeId).label,
       region: getRegion(regionId).label,
+      languageId,
       somaticAdvice:
         comfort.somaticAdvice ||
         buildSomaticAdvice({
@@ -79,8 +83,15 @@ class MultimodalAIReasoning {
    * so a model-generated reply matches the tone of the local fallback.
    */
   getPersonaPrompt() {
-    const { archetypeId, regionId } = aiConfig.getCompanionProfile();
-    return buildPersonaPrompt({ archetypeId, regionId });
+    const { archetypeId, regionId, languageId, slangLevel } = aiConfig.getCompanionProfile();
+    const language = getLanguage(languageId);
+    const tier = tierForLevel(slangLevel);
+
+    return [
+      buildPersonaPrompt({ archetypeId, regionId }),
+      `Write in ${language.label} using Latin script code-switching, at a "${tier}" level of familiarity.`,
+      'Do not apply casual register to any safety or crisis guidance.',
+    ].join(' ');
   }
 
   reset() {

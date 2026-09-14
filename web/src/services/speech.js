@@ -2,6 +2,7 @@
 import { aiConfig } from './aiConfig';
 import { getPersona, kokoroEngine } from './kokoroEngine';
 import { conditionForSpeech, resolveCadence } from './prosody';
+import { speechTargetFor } from './vernacular';
 
 class SpeechService {
   constructor() {
@@ -197,11 +198,18 @@ class SpeechService {
     const emotion = options.emotion || 'neutral';
     const urgency = options.urgency || 'normal';
 
+    // Kokoro speaks English only. When the reply is code-switched into another
+    // Indian language, skip the neural path entirely rather than feeding it
+    // text it will mangle, and let the device voice handle that locale.
+    const languageId = options.languageId || profile.languageId;
+    const speechTarget = speechTargetFor(languageId);
+    const canUseNeural = profile.engine === 'neural' && persona.neuralAvailable && speechTarget.neuralCapable;
+
     const finish = () => {
       if (token === this.utteranceToken) onEnd?.();
     };
 
-    if (profile.engine === 'neural' && persona.neuralAvailable) {
+    if (canUseNeural) {
       try {
         const played = await kokoroEngine.speak(conditioned, {
           personaId,
@@ -217,11 +225,22 @@ class SpeechService {
       }
     }
 
-    this.speakWithBrowser(conditioned, { persona, emotion, urgency, token, onStart: options.onStart, onEnd: finish });
+    this.speakWithBrowser(conditioned, {
+      persona,
+      emotion,
+      urgency,
+      token,
+      // Prefer the language's own locale; fall back to Indian English when
+      // the device has no voice installed for it.
+      preferredLang: speechTarget.locale,
+      fallbackLang: speechTarget.fallbackLocale,
+      onStart: options.onStart,
+      onEnd: finish,
+    });
   }
 
   /** Web Speech API path. Receives text that is already prosody-conditioned. */
-  speakWithBrowser(conditionedText, { persona, emotion, urgency, token, onStart, onEnd }) {
+  speakWithBrowser(conditionedText, { persona, emotion, urgency, token, preferredLang, fallbackLang, onStart, onEnd }) {
     if (!this.synth) {
       onEnd?.();
       return;
@@ -234,9 +253,15 @@ class SpeechService {
     utterance.rate = cadence.rate;
     utterance.pitch = cadence.pitch;
     utterance.volume = cadence.volume;
-    utterance.lang = persona.fallbackLang;
 
-    const voice = this.pickBrowserVoice(persona.fallbackLang);
+    const targetLang = preferredLang || persona.fallbackLang;
+    const voice =
+      this.pickBrowserVoice(targetLang) ||
+      this.pickBrowserVoice(fallbackLang || persona.fallbackLang);
+
+    // Announce the locale we can actually voice, not the one we wanted, so the
+    // synthesiser does not apply the wrong pronunciation rules.
+    utterance.lang = voice?.lang?.replace('_', '-') || fallbackLang || persona.fallbackLang;
     if (voice) utterance.voice = voice;
 
     utterance.onstart = () => {
@@ -261,6 +286,8 @@ class SpeechService {
     const isHighQuality = (voice) =>
       /Natural|Neural|Enhanced|Premium|Google|Samantha|Karen|Victoria|Zira|Rishi|Veena/i.test(voice.name);
 
+    // Exact locale, then any voice in the same language. Never cross into a
+    // different language — an en-US voice reading Tamil is worse than silence.
     return (
       voices.find((voice) => voice.lang.replace('_', '-') === preferredLang && isHighQuality(voice)) ||
       voices.find((voice) => voice.lang.replace('_', '-') === preferredLang) ||
@@ -268,6 +295,11 @@ class SpeechService {
       voices.find((voice) => voice.lang.startsWith(baseLang)) ||
       null
     );
+  }
+
+  /** True when the device has a voice installed for this locale. */
+  hasVoiceFor(locale) {
+    return Boolean(this.pickBrowserVoice(locale));
   }
 
   /** Warms the neural weights so the first reply does not wait on a download. */

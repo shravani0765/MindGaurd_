@@ -1731,3 +1731,7 @@
     padding-right: 18px;
   }
 }
+
+.app-header__sanctuary {
+  min-height: 42px;
+}

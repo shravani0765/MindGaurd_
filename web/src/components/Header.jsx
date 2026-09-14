@@ -15,6 +15,8 @@ import {
   Compass,
   LogOut,
   AudioLines,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { ambianceEngine } from '../services/audioAmbiance';
 
@@ -24,6 +26,8 @@ export default function Header({
   userName = 'You',
   onLogout,
   onOpenVoiceStudio,
+  sanctuaryMode = 'default',
+  onToggleSanctuary,
   autoInterventionActive: _autoInterventionActive = false,
 }) {
   const [activeTrack, setActiveTrack] = useState(null);
@@ -148,6 +152,17 @@ export default function Header({
             )}
           </div>
         )}
+
+        <button
+          type="button"
+          onClick={onToggleSanctuary}
+          className={`btn-ghost app-header__sanctuary ${sanctuaryMode === 'amber' ? 'active' : ''}`}
+          aria-pressed={sanctuaryMode === 'amber'}
+          title={sanctuaryMode === 'amber' ? 'Return to daylight' : 'Dim to warm night mode'}
+        >
+          {sanctuaryMode === 'amber' ? <Sun size={14} /> : <Moon size={14} />}
+          <span>{sanctuaryMode === 'amber' ? 'Daylight' : 'Dim'}</span>
+        </button>
 
         <button
           type="button"

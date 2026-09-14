@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { speechService } from '../services/speech';
 import { apiClient } from '../services/api';
-import { faceAnalyzer } from '../services/faceEmotionDetector';
+import { ANALYSIS_INTERVAL_MS, faceAnalyzer } from '../services/faceEmotionDetector';
 import { aiReasoningEngine } from '../services/aiReasoning';
 import { ambianceEngine } from '../services/audioAmbiance';
 
@@ -48,37 +48,39 @@ export default function ComboInterface({
     valence: 85,
   });
 
-  // 1. Camera Lifecycle & Real-time Vision Frame Analyzer
+  // 1. Camera lifecycle and throttled vision sampling.
   useEffect(() => {
-    let frameId = null;
+    let intervalId = null;
+    let cancelled = false;
 
-    const analyzeLoop = () => {
-      if (videoRef.current && isCamOn) {
-        const result = faceAnalyzer.analyzeVideoFrame(videoRef.current);
-        if (result) {
-          setTelemetry((prev) => ({
-            ...prev,
-            emotion: result.emotion,
-            tension: result.tension,
-            fatigue: result.fatigue,
-            valence: result.valence,
-            confidence: result.confidence,
-          }));
-        }
-      }
-      frameId = requestAnimationFrame(analyzeLoop);
+    const sampleFrame = () => {
+      const result = faceAnalyzer.analyzeVideoFrame(videoRef.current);
+      if (!result) return;
+
+      setTelemetry((prev) => ({
+        ...prev,
+        emotion: result.emotion,
+        // Smooth the continuous measures so one noisy frame cannot spike the
+        // meters, while letting the discrete label switch immediately.
+        tension: prev.tension * 0.6 + result.tension * 0.4,
+        fatigue: prev.fatigue * 0.6 + result.fatigue * 0.4,
+        valence: prev.valence * 0.6 + result.valence * 0.4,
+        confidence: result.confidence,
+      }));
     };
 
     if (isCamOn) {
       startCamera().then(() => {
-        frameId = requestAnimationFrame(analyzeLoop);
+        if (cancelled) return;
+        intervalId = setInterval(sampleFrame, ANALYSIS_INTERVAL_MS);
       });
     } else {
       stopCamera();
     }
 
     return () => {
-      if (frameId) cancelAnimationFrame(frameId);
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
       stopCamera();
     };
   }, [isCamOn]);
@@ -180,7 +182,7 @@ export default function ComboInterface({
             setOrbState('idle');
           }
         },
-        { emotion: aiResult.fusedEmotion, urgency: aiResult.urgency }
+        { emotion: aiResult.fusedEmotion, urgency: aiResult.urgency, languageId: aiResult.languageId }
       );
     } catch (err) {
       console.error('Multimodal processing error:', err);

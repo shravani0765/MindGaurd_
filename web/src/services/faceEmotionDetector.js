@@ -1,5 +1,14 @@
 // web/src/services/faceEmotionDetector.js
-// Real-time Computer Vision Facial Expression & Stress Analyzer
+// Real-time facial expression & stress analyzer.
+//
+// This is a hand-written optical heuristic over downscaled frame luminance and
+// edge energy — not a trained model. It reads brow shadow for tension, mouth
+// region brightness for affect, and overall luminance/edge density for fatigue.
+
+// Sampling cadence. Deliberately throttled: the pixel loop is synchronous, so
+// running it per animation frame pegs a core and stalls UI paint. Emotional
+// state does not change meaningfully faster than this anyway.
+export const ANALYSIS_INTERVAL_MS = 500; // 2 fps
 
 export class FaceEmotionAnalyzer {
   constructor() {

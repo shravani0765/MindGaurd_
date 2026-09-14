@@ -423,3 +423,87 @@ body::after {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(20, 184, 166, 0.38);
 }
+
+/* ---------------------------------------------------- Amber night sanctuary
+   Engaged automatically when distress is detected, or manually from the
+   header. Overrides the palette tokens only, so every component follows
+   without needing its own dark-mode rules. */
+:root[data-sanctuary='amber'] {
+  --bg-space: #1a1410;
+  --bg-surface: #241c16;
+  --bg-surface-elevated: #2e241c;
+  --bg-glass: rgba(36, 28, 22, 0.94);
+  --bg-glass-card: #2a211a;
+  --bg-glass-card-hover: #332820;
+
+  --calm-blue-light: #4a3a2a;
+  --calm-blue: #e0a563;
+  --calm-blue-deep: #c98a44;
+  --sage-green-light: #3a2e22;
+  --sage-green: #d9a05f;
+  --sage-green-deep: #e8b877;
+  --pastel-peach: #e8a76b;
+  --pastel-peach-warm: #d98c45;
+  --soft-lavender: #3a2e24;
+
+  --text-primary: #f4e6d6;
+  --text-secondary: #c9b39c;
+  --text-muted: #9d8974;
+  --text-accent: #e8b877;
+
+  --border-glass: rgba(232, 184, 119, 0.16);
+  --border-glass-bright: rgba(232, 184, 119, 0.28);
+  --border-glass-green: rgba(217, 160, 95, 0.32);
+  --shadow-glass: 0 20px 40px rgba(0, 0, 0, 0.35);
+  --shadow-glow-blue: 0 16px 30px rgba(201, 138, 68, 0.14);
+  --shadow-glow-sage: 0 16px 30px rgba(217, 160, 95, 0.12);
+  --shadow-glow-peach: 0 16px 30px rgba(217, 140, 69, 0.14);
+}
+
+/* The whole page cross-fades rather than snapping, since the point of this
+   mode is to feel like a lamp being turned down. */
+:root[data-sanctuary='amber'] body,
+:root:not([data-sanctuary]) body {
+  transition: background 1.1s ease, color 1.1s ease;
+}
+
+:root[data-sanctuary='amber'] body {
+  background: linear-gradient(180deg, #1f1811 0%, #1a1410 55%, #150f0c 100%);
+}
+
+:root[data-sanctuary='amber'] body::before {
+  background: radial-gradient(circle, rgba(232, 184, 119, 0.13) 0%, rgba(0, 0, 0, 0) 72%);
+}
+
+:root[data-sanctuary='amber'] body::after {
+  background: radial-gradient(circle, rgba(201, 138, 68, 0.1) 0%, rgba(0, 0, 0, 0) 72%);
+}
+
+/* Inputs keep an explicit surface so text stays legible against the warm bed. */
+:root[data-sanctuary='amber'] .ui-field__control,
+:root[data-sanctuary='amber'] .glass-input {
+  background: #1f1913;
+  border-color: rgba(232, 184, 119, 0.22);
+  color: var(--text-primary);
+}
+
+:root[data-sanctuary='amber'] .ui-button--ghost,
+:root[data-sanctuary='amber'] .ui-option {
+  background: var(--bg-glass-card);
+}
+
+:root[data-sanctuary='amber'] .ui-button--primary {
+  color: #23180f;
+}
+
+:root[data-sanctuary='amber'] .ui-status--info,
+:root[data-sanctuary='amber'] .ui-callout--muted {
+  background: var(--bg-surface-elevated);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-sanctuary='amber'] body,
+  :root:not([data-sanctuary]) body {
+    transition: none;
+  }
+}

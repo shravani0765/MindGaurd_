@@ -2,7 +2,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Video, VideoOff, Camera, HeartPulse, ShieldCheck } from 'lucide-react';
 import { apiClient } from '../services/api';
-import { faceAnalyzer } from '../services/faceEmotionDetector';
+import { ANALYSIS_INTERVAL_MS, faceAnalyzer } from '../services/faceEmotionDetector';
 
 export default function VideoInterface({ isCamOn, onToggleCam, onMoodLogged, userId = null }) {
   const videoRef = useRef(null);
@@ -69,7 +69,7 @@ export default function VideoInterface({ isCamOn, onToggleCam, onMoodLogged, use
         fatigue: prev.fatigue * 0.6 + reading.fatigue * 0.4,
         valence: prev.valence * 0.6 + reading.valence * 0.4,
       }));
-    }, 1500);
+    }, ANALYSIS_INTERVAL_MS);
 
     return () => clearInterval(interval);
   }, [isCamOn]);
