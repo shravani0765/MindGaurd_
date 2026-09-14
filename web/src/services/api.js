@@ -5,9 +5,73 @@ const API_BASE =
   import.meta.env.VITE_API_URL ||
   (import.meta.env.DEV ? 'http://127.0.0.1:8000/api' : '/api');
 
+// Free hosting tiers idle the API out and take ~50s to boot. A 7s budget
+// aborted every request during that window, so the app looked broken rather
+// than slow. Normal calls stay snappy; the first one is allowed to wait.
+const REQUEST_TIMEOUT_MS = 20000;
+const COLD_START_TIMEOUT_MS = 70000;
+
+let serverIsAwake = false;
+let wakeUpPromise = null;
+
+/** Subscribers are notified while the server is booting, so the UI can say so. */
+const wakeListeners = new Set();
+
+export function onServerWaking(listener) {
+  wakeListeners.add(listener);
+  return () => wakeListeners.delete(listener);
+}
+
+function announceWaking(isWaking) {
+  wakeListeners.forEach((listener) => {
+    try {
+      listener(isWaking);
+    } catch (error) {
+      console.error('Wake listener error:', error);
+    }
+  });
+}
+
+/**
+ * Pings /health until the API answers. Safe to call repeatedly — concurrent
+ * callers share one in-flight ping, and it is a no-op once awake.
+ */
+export function wakeServer() {
+  if (serverIsAwake) return Promise.resolve(true);
+  if (wakeUpPromise) return wakeUpPromise;
+
+  announceWaking(true);
+  const healthUrl = `${API_BASE.replace(/\/api$/, '')}/health`;
+
+  wakeUpPromise = (async () => {
+    const deadline = Date.now() + COLD_START_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      try {
+        const response = await fetch(healthUrl, { method: 'GET' });
+        if (response.ok) {
+          serverIsAwake = true;
+          return true;
+        }
+      } catch {
+        // Still booting; retry below.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+    return false;
+  })()
+    .finally(() => {
+      wakeUpPromise = null;
+      announceWaking(false);
+    });
+
+  return wakeUpPromise;
+}
+
 async function requestJson(path, options = {}, fallback) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 7000);
+  // The very first call may land on a sleeping server.
+  const budget = serverIsAwake ? REQUEST_TIMEOUT_MS : COLD_START_TIMEOUT_MS;
+  const timeoutId = setTimeout(() => controller.abort(), budget);
   const authToken = getStoredAuthToken();
 
   try {
@@ -20,6 +84,9 @@ async function requestJson(path, options = {}, fallback) {
       ...options,
       signal: controller.signal,
     });
+
+    // Any answer at all means the server is up; later calls use the short budget.
+    serverIsAwake = true;
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -172,6 +239,17 @@ export const apiClient = {
       () => []
     );
     return Array.isArray(data) ? data.map(normalizeMoodLog) : [];
+  },
+
+  async exportAccountData() {
+    return requestJson('/account/export');
+  },
+
+  async deleteAccount(password) {
+    return requestJson('/account/delete', {
+      method: 'DELETE',
+      body: JSON.stringify({ password }),
+    });
   },
 
   async createMoodEntry(payload) {

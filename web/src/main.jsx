@@ -8,3 +8,13 @@ createRoot(document.getElementById('root')).render(
     <App />
   </StrictMode>,
 )
+
+// Offline shell. Registered after load so it never competes with first paint,
+// and only in production — an active worker makes dev HMR confusing.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .catch((error) => console.warn('Service worker registration failed:', error));
+  });
+}

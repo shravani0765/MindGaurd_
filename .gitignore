@@ -33,3 +33,7 @@ __pycache__/
 *.py[cod]
 django_backend/db.sqlite3
 django_backend/staticfiles/
+
+# macOS / cloud-sync conflict copies ("App 2.jsx", "views 2.py").
+# These are duplicates of real source files and must never be committed.
+* [0-9].*

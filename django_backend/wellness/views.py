@@ -10,7 +10,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from .models import MindGuardUser
+from .models import MindGuardUser, MoodLog
 from .serializers import (
     AuthLoginSerializer,
     AuthRegisterSerializer,
@@ -451,6 +451,68 @@ def burnout_risk_view(request):
 
     snapshot = format_burnout_snapshot(get_user_logs(user_id))
     return Response(snapshot)
+
+
+@api_view(["GET"])
+def export_account_view(request):
+    """Returns everything stored about the caller, as JSON.
+
+    The product's promise is that this data belongs to the user, so it has to
+    be walkable out of the door without asking anyone.
+    """
+    user = _authenticated_user(request)
+    if not user:
+        return Response({"message": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    logs = get_user_logs(str(user.external_id))
+    payload = {
+        "exportedAt": timezone.now().isoformat(),
+        "account": {
+            "id": str(user.external_id),
+            "email": user.email,
+            "firstName": user.first_name,
+            "lastName": user.last_name,
+            "isVerified": user.is_verified,
+            "createdAt": user.created_at.isoformat(),
+            "lastLoginAt": user.last_login_at.isoformat() if user.last_login_at else None,
+        },
+        "burnoutSnapshot": format_burnout_snapshot(logs),
+        "moodLogs": MoodLogSerializer(logs, many=True).data,
+        "note": (
+            "Your onboarding archetype, language, voice and comfort profile are stored "
+            "only in your browser and were never uploaded, so they are not included here."
+        ),
+    }
+
+    response = Response(payload)
+    response["Content-Disposition"] = 'attachment; filename="mindguard-export.json"'
+    return response
+
+
+@api_view(["DELETE"])
+def delete_account_view(request):
+    """Permanently deletes the account and every mood log attached to it.
+
+    Requires the current password: a stray click or a borrowed laptop should
+    not be able to destroy someone's history.
+    """
+    user = _authenticated_user(request)
+    if not user:
+        return Response({"message": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    password = request.data.get("password", "")
+    if not password or not check_password(password, user.password_hash):
+        return Response(
+            {"message": "Enter your current password to confirm deletion."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # MoodLog.user is SET_NULL, so delete the logs explicitly rather than
+    # leaving orphaned rows behind.
+    deleted_logs, _ = MoodLog.objects.filter(client_user_id=str(user.external_id)).delete()
+    user.delete()
+
+    return Response({"message": "Account deleted.", "deletedMoodLogs": deleted_logs})
 
 
 @api_view(["POST"])

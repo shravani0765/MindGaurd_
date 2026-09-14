@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { apiClient } from '../services/api';
 import { Button, Callout, CheckboxField, Field, FieldRow, StatusBanner } from './ui';
+import CrisisResources from './CrisisResources';
+import { detectCrisisRegion } from '../services/crisisResources';
 
 const LOGIN_FORM = { email: '', password: '' };
 const SIGNUP_FORM = {
@@ -51,6 +53,8 @@ export default function AuthScreen({
   const [banner, setBanner] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // No onboarding choice exists yet at signup, so guess from the browser.
+  const [crisisRegion] = useState(detectCrisisRegion);
 
   useEffect(() => {
     async function runVerification() {
@@ -311,28 +315,7 @@ export default function AuthScreen({
               </Button>
             </div>
 
-            <Callout
-              tone="danger"
-              icon={AlertTriangle}
-              title="If you are in a life threatening situation — don't use this site"
-            >
-              <p>
-                Call or text <strong>988</strong> (Suicide &amp; Crisis Lifeline) for immediate
-                support, or call <strong>911</strong> / go to your nearest emergency room if you are
-                in immediate danger.
-              </p>
-              <p>
-                For treatment referrals, SAMHSA's National Helpline is{' '}
-                <strong>1-800-662-HELP (4357)</strong>, free and available 24/7.
-              </p>
-              <p>
-                Outside the US, find your local line at{' '}
-                <a href="https://findahelpline.com" target="_blank" rel="noreferrer">
-                  findahelpline.com
-                </a>
-                .
-              </p>
-            </Callout>
+            <CrisisResources regionId={crisisRegion} />
           </form>
         )}
 

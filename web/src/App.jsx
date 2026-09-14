@@ -11,12 +11,13 @@ import BurnoutRadar from './components/BurnoutRadar';
 import SadhguruMeditationModal from './components/SadhguruMeditationModal';
 import InsightsPanel from './components/InsightsPanel';
 import DashboardHero from './components/DashboardHero';
+import StreakCard from './components/StreakCard';
 import RecoveryGuidePanel from './components/RecoveryGuidePanel';
 import AuthScreen from './components/AuthScreen';
 import OnboardingScreen from './components/OnboardingScreen';
 import VoiceStudioModal from './components/VoiceStudioModal';
 import { Music, X } from 'lucide-react';
-import { apiClient } from './services/api';
+import { apiClient, onServerWaking, wakeServer } from './services/api';
 import { clearStoredSession, loadStoredSession, saveStoredSession } from './services/authSession';
 import { aiConfig } from './services/aiConfig';
 import { speechService } from './services/speech';
@@ -50,6 +51,7 @@ export default function App() {
   const [isOnboarded, setIsOnboarded] = useState(() => aiConfig.isOnboarded());
   const [interventionToast, setInterventionToast] = useState(null);
   const [sanctuaryMode, setSanctuaryMode] = useState('default');
+  const [isServerWaking, setIsServerWaking] = useState(false);
 
   const activeUserId = session?.user?.id || null;
   const burnoutScore = burnoutSnapshot.burnoutRisk;
@@ -105,6 +107,14 @@ export default function App() {
 
     void refreshInsights(activeUserId);
   }, [activeUserId]);
+
+  // Free hosting sleeps the API. Start waking it the moment the page opens so
+  // the first real request is not the one that pays the ~50s cold start.
+  useEffect(() => {
+    const unsubscribe = onServerWaking(setIsServerWaking);
+    void wakeServer();
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     setSanctuaryMode(sanctuaryTheme.restore());
@@ -248,6 +258,13 @@ export default function App() {
         onToggleSanctuary={() => sanctuaryTheme.toggle()}
       />
 
+      {isServerWaking && (
+        <div className="waking-banner" role="status" aria-live="polite">
+          <span className="waking-banner__spinner" aria-hidden="true" />
+          <span>Waking the server up — first load after a quiet spell takes about 30 seconds.</span>
+        </div>
+      )}
+
       {interventionToast && (
         <div className="intervention-toast">
           <Music size={18} color="var(--sage-green)" />
@@ -270,6 +287,8 @@ export default function App() {
             onStartCheckIn={() => setCurrentMode('text')}
             onViewTrends={() => setIsDashboardOpen(true)}
           />
+
+          <StreakCard moodHistory={moodHistory} />
 
           <InsightsPanel
             burnoutSnapshot={burnoutSnapshot}
@@ -351,7 +370,11 @@ export default function App() {
         onClose={() => setIsMeditationOpen(false)}
       />
 
-      <VoiceStudioModal isOpen={isVoiceStudioOpen} onClose={() => setIsVoiceStudioOpen(false)} />
+      <VoiceStudioModal
+        isOpen={isVoiceStudioOpen}
+        onClose={() => setIsVoiceStudioOpen(false)}
+        onAccountDeleted={handleLogout}
+      />
     </div>
   );
 }

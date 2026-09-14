@@ -5,7 +5,7 @@ from django.core import mail
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from .models import MindGuardUser
+from .models import MindGuardUser, MoodLog
 
 
 @override_settings(DEBUG=True, FRONTEND_URL="http://127.0.0.1:5173")
@@ -678,3 +678,83 @@ class AccountEmailDeliveryTests(TestCase):
         self.assertNotIn("emailDelivered", response.json())
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("/verify-email?token=", mail.outbox[0].body)
+
+
+@override_settings(DEBUG=True, DEMO_AUTO_VERIFY=True, OPENAI_API_KEY="")
+class AccountDataRightsTests(TestCase):
+    """Export and deletion — the promises the privacy pitch rests on."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.post(
+            "/api/auth/register",
+            {
+                "firstName": "Data",
+                "lastName": "Owner",
+                "email": "owner@example.com",
+                "password": "strongpass123",
+                "passwordConfirm": "strongpass123",
+                "agreeToTerms": True,
+            },
+            format="json",
+        )
+        token = self.client.post(
+            "/api/auth/login",
+            {"email": "owner@example.com", "password": "strongpass123"},
+            format="json",
+        ).json()["authToken"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        self.client.post("/api/interactions/text", {"text": "I feel stressed"}, format="json")
+
+    def test_export_requires_authentication(self):
+        anonymous = APIClient()
+        self.assertEqual(anonymous.get("/api/account/export").status_code, 401)
+
+    def test_export_returns_the_account_and_its_logs(self):
+        response = self.client.get("/api/account/export")
+        self.assertEqual(response.status_code, 200)
+
+        body = response.json()
+        self.assertEqual(body["account"]["email"], "owner@example.com")
+        self.assertEqual(len(body["moodLogs"]), 1)
+        self.assertIn("burnoutSnapshot", body)
+        self.assertIn("attachment", response["Content-Disposition"])
+
+    def test_export_never_includes_the_password_hash(self):
+        body = self.client.get("/api/account/export").json()
+        self.assertNotIn("password_hash", str(body))
+        self.assertNotIn("passwordHash", body["account"])
+
+    def test_delete_requires_the_correct_password(self):
+        response = self.client.delete(
+            "/api/account/delete", {"password": "wrongpassword"}, format="json"
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(MindGuardUser.objects.filter(email="owner@example.com").exists())
+
+    def test_delete_requires_a_password_at_all(self):
+        response = self.client.delete("/api/account/delete", {}, format="json")
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(MindGuardUser.objects.filter(email="owner@example.com").exists())
+
+    def test_delete_removes_the_account_and_its_mood_logs(self):
+        user = MindGuardUser.objects.get(email="owner@example.com")
+        self.assertEqual(MoodLog.objects.filter(client_user_id=str(user.external_id)).count(), 1)
+
+        response = self.client.delete(
+            "/api/account/delete", {"password": "strongpass123"}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["deletedMoodLogs"], 1)
+
+        self.assertFalse(MindGuardUser.objects.filter(email="owner@example.com").exists())
+        # No orphaned rows: MoodLog.user is SET_NULL, so these must be deleted
+        # explicitly or they would survive the account.
+        self.assertEqual(MoodLog.objects.filter(client_user_id=str(user.external_id)).count(), 0)
+
+    def test_delete_requires_authentication(self):
+        anonymous = APIClient()
+        response = anonymous.delete(
+            "/api/account/delete", {"password": "strongpass123"}, format="json"
+        )
+        self.assertEqual(response.status_code, 401)

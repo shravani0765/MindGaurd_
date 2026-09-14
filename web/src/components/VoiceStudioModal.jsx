@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Check, Cpu, Download, Volume2, X, Zap } from 'lucide-react';
 import { Badge, Button, Callout, OptionCard, StatusBanner } from './ui';
 import WarmthSlider from './WarmthSlider';
+import PrivacyPanel from './PrivacyPanel';
+import CrisisResources from './CrisisResources';
+import { crisisRegionFor } from '../services/crisisResources';
 import { aiConfig } from '../services/aiConfig';
 import { ARCHETYPES, REGIONS } from '../services/archetypes';
 import { VOICE_PERSONAS, kokoroEngine } from '../services/kokoroEngine';
@@ -27,7 +30,7 @@ const ENGINE_OPTIONS = [
   },
 ];
 
-export default function VoiceStudioModal({ isOpen, onClose }) {
+export default function VoiceStudioModal({ isOpen, onClose, onAccountDeleted }) {
   const [engine, setEngine] = useState(() => aiConfig.getTtsEngine());
   const [personaId, setPersonaId] = useState(() => aiConfig.getVoicePersona());
   const [archetypeId, setArchetypeId] = useState(() => aiConfig.getArchetype());
@@ -235,6 +238,13 @@ export default function VoiceStudioModal({ isOpen, onClose }) {
                 />
               ))}
             </div>
+          </section>
+
+          <PrivacyPanel onAccountDeleted={onAccountDeleted} />
+
+          <section className="voice-studio__section">
+            <h3>Crisis support</h3>
+            <CrisisResources regionId={crisisRegionFor(languageId)} compact />
           </section>
 
           <Callout tone="muted">
