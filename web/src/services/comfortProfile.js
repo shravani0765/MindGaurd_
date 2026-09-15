@@ -85,6 +85,19 @@ export function validateComfortTrackUrl(url) {
 class ComfortTrackPlayer {
   constructor() {
     this.element = null;
+    this.baseVolume = 0.18;
+    this.isDucked = false;
+  }
+
+  /** Drops the track under the voice. Mirrors ambianceEngine.duck(). */
+  duck() {
+    this.isDucked = true;
+    if (this.element) this.element.volume = this.baseVolume * 0.25;
+  }
+
+  restore() {
+    this.isDucked = false;
+    if (this.element) this.element.volume = this.baseVolume;
   }
 
   play(url, { volume = 0.18 } = {}) {
@@ -97,7 +110,8 @@ class ComfortTrackPlayer {
     }
 
     if (this.element.src !== url) this.element.src = url;
-    this.element.volume = volume;
+    this.baseVolume = volume;
+    this.element.volume = this.isDucked ? volume * 0.25 : volume;
 
     // Autoplay can still be refused if no gesture has happened yet; the
     // soundscape bed is the fallback comfort layer in that case.

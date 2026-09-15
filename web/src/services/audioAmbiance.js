@@ -10,6 +10,11 @@ class CalmingAudioEngine {
     this.gainNode = null;
     this.masterVolume = 0.25;
     this.onTrackChange = null;
+
+    // Ducking state. `duckDepth` is the fraction of master volume kept while
+    // something more important (the companion's voice) is playing.
+    this.isDucked = false;
+    this.duckDepth = 0.22;
   }
 
   initContext() {
@@ -17,7 +22,7 @@ class CalmingAudioEngine {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AudioContext();
       this.gainNode = this.ctx.createGain();
-      this.gainNode.gain.setValueAtTime(this.masterVolume, this.ctx.currentTime);
+      this.gainNode.gain.setValueAtTime(this._targetGain(), this.ctx.currentTime);
       this.gainNode.connect(this.ctx.destination);
     }
   }
@@ -25,8 +30,44 @@ class CalmingAudioEngine {
   setVolume(volume) {
     this.masterVolume = volume;
     if (this.gainNode && this.ctx) {
-      this.gainNode.gain.setValueAtTime(volume, this.ctx.currentTime);
+      // Respect an active duck so changing volume mid-speech does not shout.
+      const target = this.isDucked ? volume * this.duckDepth : volume;
+      this.gainNode.gain.setValueAtTime(target, this.ctx.currentTime);
     }
+  }
+
+  /** Current gain target, accounting for ducking. */
+  _targetGain() {
+    return this.isDucked ? this.masterVolume * this.duckDepth : this.masterVolume;
+  }
+
+  /**
+   * Smoothly drops the bed so speech sits on top of it.
+   *
+   * Without this the soundscape and the voice play at full level together,
+   * which is what made a caring reply sound like it was competing with the
+   * music. Ramped rather than stepped, because an instant cut is itself
+   * startling.
+   */
+  duck({ fadeMs = 320 } = {}) {
+    this.isDucked = true;
+    if (!this.gainNode || !this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    this.gainNode.gain.cancelScheduledValues(now);
+    this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+    this.gainNode.gain.linearRampToValueAtTime(this._targetGain(), now + fadeMs / 1000);
+  }
+
+  /** Brings the bed back up once speech has finished. Slower than the duck. */
+  restore({ fadeMs = 900 } = {}) {
+    this.isDucked = false;
+    if (!this.gainNode || !this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    this.gainNode.gain.cancelScheduledValues(now);
+    this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+    this.gainNode.gain.linearRampToValueAtTime(this._targetGain(), now + fadeMs / 1000);
   }
 
   // 1. 🌧️ Gentle Soothing Rain & Soft Breeze (Filtered Pink/Brown Noise)

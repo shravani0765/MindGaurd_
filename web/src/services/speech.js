@@ -3,6 +3,8 @@ import { aiConfig } from './aiConfig';
 import { getPersona, kokoroEngine } from './kokoroEngine';
 import { conditionForSpeech, resolveCadence } from './prosody';
 import { speechTargetFor } from './vernacular';
+import { ambianceEngine } from './audioAmbiance';
+import { comfortTrackPlayer } from './comfortProfile';
 
 class SpeechService {
   constructor() {
@@ -205,7 +207,12 @@ class SpeechService {
     const speechTarget = speechTargetFor(languageId);
     const canUseNeural = profile.engine === 'neural' && persona.neuralAvailable && speechTarget.neuralCapable;
 
+    // Duck the music for the whole utterance. Doing it here rather than in
+    // each caller means every speech path (chat, voice, combo, preview) gets it.
+    this.duckBackground();
+
     const finish = () => {
+      this.restoreBackground();
       if (token === this.utteranceToken) onEnd?.();
     };
 
@@ -308,8 +315,21 @@ class SpeechService {
     return kokoroEngine.preload(onProgress);
   }
 
+  /** Lowers ambience and the comfort track so the voice is clearly audible. */
+  duckBackground() {
+    ambianceEngine.duck();
+    comfortTrackPlayer.duck();
+  }
+
+  restoreBackground() {
+    ambianceEngine.restore();
+    comfortTrackPlayer.restore();
+  }
+
   stopSpeaking() {
     this.utteranceToken += 1;
+    // Interrupting speech must also release the duck, or the music stays quiet.
+    this.restoreBackground();
     kokoroEngine.stop();
     if (this.synth) {
       this.synth.cancel();

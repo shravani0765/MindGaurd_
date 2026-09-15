@@ -4,6 +4,7 @@ import { Send, Sparkles, User, Bot, HeartPulse, ShieldCheck } from 'lucide-react
 import { apiClient } from '../services/api';
 import { buildComfortResponse } from '../services/wellnessIntelligence';
 import { aiConfig } from '../services/aiConfig';
+import { generateReply, rememberTurn } from '../services/geminiClient';
 
 export default function ChatInterface({ userId = null, onMoodLogged }) {
   const [messages, setMessages] = useState([
@@ -63,6 +64,22 @@ export default function ChatInterface({ userId = null, onMoodLogged }) {
 
       if (onMoodLogged) onMoodLogged(response.moodLog);
 
+      // Ask Gemini for a reply that actually responds to what they said.
+      // Templates stay as the fallback, and a crisis turn never reaches the
+      // model (generateReply returns null for those).
+      const urgency = response.moodLog?.details?.urgency || 'normal';
+      const topicFlags = response.moodLog?.details?.topicFlags || {};
+      rememberTurn('user', userText);
+      const generated = await generateReply({
+        userText,
+        emotion,
+        urgency,
+        topicFlags,
+        somaticAdvice: comfort.somaticAdvice,
+      });
+      const replyText = generated?.text || `${comfort.message} ${comfort.followUp}`.trim();
+      rememberTurn('assistant', replyText);
+
       setMessages((prev) =>
         prev.map((message) => (message.id === userMsg.id ? { ...message, emotion, confidence } : message))
       );
@@ -71,7 +88,7 @@ export default function ChatInterface({ userId = null, onMoodLogged }) {
         const aiMsg = {
           id: Date.now() + 1,
           sender: 'ai',
-          text: `${comfort.message} ${comfort.followUp}`.trim(),
+          text: replyText,
           emotion,
           timestamp: 'Just now',
         };

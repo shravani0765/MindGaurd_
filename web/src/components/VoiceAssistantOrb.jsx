@@ -5,6 +5,7 @@ import { speechService } from '../services/speech';
 import { apiClient } from '../services/api';
 import { buildComfortResponse } from '../services/wellnessIntelligence';
 import { aiConfig } from '../services/aiConfig';
+import { generateReply, rememberTurn } from '../services/geminiClient';
 
 export default function VoiceAssistantOrb({
   isMicOn,
@@ -89,7 +90,16 @@ export default function VoiceAssistantOrb({
 
       if (onMoodLogged) onMoodLogged(response.moodLog);
 
-      const aiReply = `${comfort.message} ${comfort.followUp}`.trim();
+      rememberTurn('user', userText);
+      const generated = await generateReply({
+        userText,
+        emotion,
+        urgency,
+        topicFlags: response.moodLog?.details?.topicFlags || {},
+        somaticAdvice: comfort.somaticAdvice,
+      });
+      const aiReply = generated?.text || `${comfort.message} ${comfort.followUp}`.trim();
+      rememberTurn('assistant', aiReply);
       setLastResponse(aiReply);
 
       // 3. Speak the reply with the selected neural persona.

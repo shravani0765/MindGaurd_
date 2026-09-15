@@ -6,6 +6,7 @@ import {
 import { aiConfig } from './aiConfig';
 import { buildPersonaPrompt, getArchetype, getRegion } from './archetypes';
 import { getLanguage, tierForLevel } from './vernacular';
+import { generateReply, rememberTurn } from './geminiClient';
 
 class MultimodalAIReasoning {
   constructor() {
@@ -57,7 +58,16 @@ class MultimodalAIReasoning {
       slangLevel,
       turn,
     });
-    const response = `${comfort.message} ${comfort.followUp}`.trim();
+    rememberTurn('user', text);
+    const generated = await generateReply({
+      userText: text,
+      emotion: fusion.emotion,
+      urgency: fusion.urgency,
+      topicFlags: fusion.topicFlags,
+      somaticAdvice: comfort.somaticAdvice,
+    });
+    const response = generated?.text || `${comfort.message} ${comfort.followUp}`.trim();
+    rememberTurn('assistant', response);
     this.conversationHistory.push({ role: 'assistant', text: response, timestamp: Date.now() });
 
     return {

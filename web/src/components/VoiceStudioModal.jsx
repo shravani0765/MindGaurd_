@@ -3,6 +3,7 @@ import { Check, Cpu, Download, Volume2, X, Zap } from 'lucide-react';
 import { Badge, Button, Callout, OptionCard, StatusBanner } from './ui';
 import WarmthSlider from './WarmthSlider';
 import PrivacyPanel from './PrivacyPanel';
+import AiBrainPanel from './AiBrainPanel';
 import CrisisResources from './CrisisResources';
 import { crisisRegionFor } from '../services/crisisResources';
 import { aiConfig } from '../services/aiConfig';
@@ -127,6 +128,8 @@ export default function VoiceStudioModal({ isOpen, onClose, onAccountDeleted }) 
         </header>
 
         <div className="voice-studio__body">
+          <AiBrainPanel />
+
           <section className="voice-studio__section">
             <h3>Audio engine</h3>
             <EngineStatus state={engineState} engine={engine} />
