@@ -1988,3 +1988,27 @@
     transition: none;
   }
 }
+
+/* Reply-source indicator and the no-key nudge. */
+.combo-card__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.combo-card--nudge {
+  border-color: rgba(234, 127, 56, 0.34);
+  background: rgba(234, 127, 56, 0.07);
+}
+
+.combo-card--nudge p {
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.chat-footnote--warn {
+  color: #a2520f;
+  font-weight: 600;
+}

@@ -1,11 +1,12 @@
 // web/src/components/VoiceAssistantOrb.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Sparkles, Radio, HeartPulse, ShieldCheck } from 'lucide-react';
+import { Mic, MicOff, Sparkles, Radio, HeartPulse, ShieldCheck, WifiOff } from 'lucide-react';
+import { Badge } from './ui';
 import { speechService } from '../services/speech';
 import { apiClient } from '../services/api';
 import { buildComfortResponse } from '../services/wellnessIntelligence';
 import { aiConfig } from '../services/aiConfig';
-import { generateReply, rememberTurn } from '../services/geminiClient';
+import { generateReply, isGeminiConfigured, rememberTurn } from '../services/geminiClient';
 
 export default function VoiceAssistantOrb({
   isMicOn,
@@ -22,6 +23,8 @@ export default function VoiceAssistantOrb({
   const [detectedEmotion, setDetectedEmotion] = useState('calm');
   const [emotionConfidence, setEmotionConfidence] = useState(0.95);
   const turnRef = useRef(0);
+  // Which engine produced the last reply, so the user is never guessing.
+  const [replySource, setReplySource] = useState(null);
 
   useEffect(() => {
     if (isMicOn) {
@@ -99,6 +102,7 @@ export default function VoiceAssistantOrb({
         somaticAdvice: comfort.somaticAdvice,
       });
       const aiReply = generated?.text || `${comfort.message} ${comfort.followUp}`.trim();
+      setReplySource(generated ? { kind: 'gemini', model: generated.model } : { kind: 'offline' });
       rememberTurn('assistant', aiReply);
       setLastResponse(aiReply);
 
@@ -175,9 +179,27 @@ export default function VoiceAssistantOrb({
 
           <div className="voice-shell__cards">
             <div className="combo-card combo-card--primary">
-              <span className="combo-card__label">MindGuard response</span>
+              <span className="combo-card__label">
+                MindGuard response
+                {replySource?.kind === 'gemini' && (
+                  <Badge tone="positive" icon={Sparkles}>{replySource.model}</Badge>
+                )}
+                {replySource?.kind === 'offline' && (
+                  <Badge tone="caution" icon={WifiOff}>Offline reply</Badge>
+                )}
+              </span>
               <p>{lastResponse}</p>
             </div>
+
+            {!isGeminiConfigured() && (
+              <div className="combo-card combo-card--nudge">
+                <p>
+                  <strong>Replies are coming from a fixed script.</strong> That is why they repeat.
+                  Add a free Gemini key in <strong>Voice → Conversation brain</strong> and each reply
+                  will be written for what you actually said.
+                </p>
+              </div>
+            )}
 
             {showTranscript && (
               <div className="combo-card">
