@@ -205,7 +205,36 @@
 }
 
 .hero-grid {
-  grid-template-columns: 1.4fr 1fr;
+  /* Two real columns. Everything on the right stacks inside one child so a
+     short card can never share a row with the tall hero and leave a void. */
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  /* Stretch both columns to the same height so neither side ends short. */
+  align-items: stretch;
+}
+
+/* The hero fills its column; the stat row is pushed to the bottom so the extra
+   height reads as deliberate spacing rather than as a gap. */
+.hero-grid > .hero-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.hero-grid > .hero-panel .hero-meta-grid {
+  margin-top: auto;
+}
+
+.hero-grid__aside {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+@media (max-width: 960px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .workspace-grid {
@@ -2017,69 +2046,161 @@
 .daily-quote {
   position: relative;
   margin: 0;
-  padding: 18px 22px 16px 46px;
+  padding: 24px 26px 22px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--sage-green-light), var(--bg-surface) 70%);
-  border: 1px solid var(--border-glass);
   overflow: hidden;
+  isolation: isolate;
+  background:
+    linear-gradient(135deg, var(--sage-green-light) 0%, var(--bg-surface) 58%, var(--bg-surface) 100%);
+  border: 1px solid var(--border-glass-green);
+  box-shadow: var(--shadow-glow-sage);
 }
 
-/* Soft drifting highlight, so the card feels alive without demanding attention. */
-.daily-quote::after {
-  content: '';
+/* Soft drifting orbs give the card a slow sense of breathing. */
+.daily-quote__orb {
   position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 18% 120%, rgba(20, 184, 166, 0.16), transparent 62%);
-  animation: quote-drift 14s ease-in-out infinite alternate;
+  border-radius: 50%;
+  filter: blur(26px);
   pointer-events: none;
+  z-index: -1;
 }
 
-@keyframes quote-drift {
+.daily-quote__orb--a {
+  width: 170px;
+  height: 170px;
+  top: -60px;
+  right: -40px;
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.34), transparent 70%);
+  animation: quote-orb-a 17s ease-in-out infinite alternate;
+}
+
+.daily-quote__orb--b {
+  width: 130px;
+  height: 130px;
+  bottom: -55px;
+  left: -30px;
+  background: radial-gradient(circle, rgba(15, 159, 143, 0.26), transparent 70%);
+  animation: quote-orb-b 21s ease-in-out infinite alternate;
+}
+
+@keyframes quote-orb-a {
   from { transform: translate3d(0, 0, 0) scale(1); }
-  to   { transform: translate3d(14px, -10px, 0) scale(1.12); }
+  to   { transform: translate3d(-26px, 22px, 0) scale(1.22); }
 }
 
-.daily-quote__mark {
+@keyframes quote-orb-b {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(22px, -18px, 0) scale(1.18); }
+}
+
+.daily-quote__watermark {
   position: absolute;
-  top: 19px;
-  left: 20px;
+  right: -18px;
+  bottom: -26px;
   color: var(--sage-green);
-  opacity: 0.75;
+  opacity: 0.09;
+  z-index: -1;
+  animation: quote-breathe 9s ease-in-out infinite;
 }
 
-.daily-quote blockquote {
+/* Matches the 4-second-ish inhale/exhale the breathwork module teaches. */
+@keyframes quote-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.08; }
+  50%      { transform: scale(1.07); opacity: 0.13; }
+}
+
+.daily-quote__eyebrow {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-accent);
+  margin-bottom: 12px;
+  opacity: 0;
+  animation: quote-fade 0.6s ease 0.05s forwards;
+}
+
+.daily-quote__text {
   margin: 0;
   font-family: var(--font-heading);
-  font-size: 1.02rem;
-  line-height: 1.62;
-  letter-spacing: -0.01em;
+  font-size: 1.22rem;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.015em;
   color: var(--text-primary);
 }
 
-/* Each word fades up in sequence — the delay is set inline, per word. */
-.daily-quote blockquote span {
+/* Each word rises into place, then a single slow sheen passes across the line. */
+.daily-quote__word {
   display: inline-block;
-  /* inline-block collapses the whitespace text node between words, so the
-     gap has to come from a margin rather than from the markup. */
-  margin-right: 0.3em;
+  /* inline-block collapses the whitespace text node, so the gap is a margin. */
+  margin-right: 0.32em;
   opacity: 0;
-  transform: translateY(8px);
-  animation: quote-word 0.52s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform: translateY(14px) rotate(1.4deg);
+  animation: quote-word 0.66s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes quote-word {
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: translateY(0) rotate(0); }
 }
 
-.daily-quote figcaption {
-  margin-top: 9px;
-  font-size: 0.76rem;
+.daily-quote__text::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.5) 50%, transparent 62%);
+  transform: translateX(-100%);
+  animation: quote-sheen 7s ease-in-out 1.6s infinite;
+  pointer-events: none;
+}
+
+@keyframes quote-sheen {
+  0%        { transform: translateX(-100%); }
+  28%, 100% { transform: translateX(100%); }
+}
+
+.daily-quote__source {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 14px;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--text-accent);
+  color: var(--text-secondary);
   opacity: 0;
-  animation: quote-word 0.6s ease 0.75s forwards;
+  animation: quote-fade 0.7s ease 1.05s forwards;
+}
+
+.daily-quote__rule {
+  width: 26px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--sage-green);
+  opacity: 0.6;
+}
+
+@keyframes quote-fade {
+  to { opacity: 1; }
+}
+
+/* The motion here is decorative, so remove all of it on request. */
+@media (prefers-reduced-motion: reduce) {
+  .daily-quote__orb,
+  .daily-quote__watermark,
+  .daily-quote__text::after {
+    animation: none;
+  }
+
+  .daily-quote__word,
+  .daily-quote__eyebrow,
+  .daily-quote__source {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
 }
 
 .app-header__yoga {

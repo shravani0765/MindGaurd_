@@ -290,17 +290,19 @@ export default function App() {
             onViewTrends={() => setIsDashboardOpen(true)}
           />
 
-          <StreakCard moodHistory={moodHistory} />
+          <div className="hero-grid__aside">
+            <StreakCard moodHistory={moodHistory} />
 
-          <DailyQuote />
+            <DailyQuote />
 
-          <InsightsPanel
-            burnoutSnapshot={burnoutSnapshot}
-            moodHistory={moodHistory}
-            isLoading={isSyncingInsights}
-            onRefresh={refreshInsights}
-            onOpenDashboard={() => setIsDashboardOpen(true)}
-          />
+            <InsightsPanel
+              burnoutSnapshot={burnoutSnapshot}
+              moodHistory={moodHistory}
+              isLoading={isSyncingInsights}
+              onRefresh={refreshInsights}
+              onOpenDashboard={() => setIsDashboardOpen(true)}
+            />
+          </div>
         </section>
 
         <ModeSwitcher
