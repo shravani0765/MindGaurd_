@@ -127,7 +127,7 @@ OPENAI_TIMEOUT_SECONDS = env_int("OPENAI_TIMEOUT_SECONDS", 12)
 # server-side: a VITE_ variable would be inlined into the JS bundle and
 # readable by anyone with DevTools, which means anyone could spend the quota.
 GEMINI_API_KEY = env_str("GEMINI_API_KEY", "")
-GEMINI_MODEL = env_str("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = env_str("GEMINI_MODEL", "gemini-2.5-flash")
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()

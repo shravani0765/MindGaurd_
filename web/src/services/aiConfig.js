@@ -91,8 +91,8 @@ class AIConfigService {
   }
 
   getModel() {
-    if (typeof window === 'undefined') return 'gemini-2.0-flash';
-    return localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-2.0-flash';
+    if (typeof window === 'undefined') return 'gemini-2.5-flash';
+    return localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-2.5-flash';
   }
 
   setModel(model) {

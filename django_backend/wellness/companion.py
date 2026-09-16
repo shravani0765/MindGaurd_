@@ -191,7 +191,7 @@ def generate_reply(user_text, context=None, analysis=None, history=None):
     if not (user_text or "").strip():
         return None, "empty-input"
 
-    model = getattr(settings, "GEMINI_MODEL", "gemini-2.0-flash")
+    model = getattr(settings, "GEMINI_MODEL", "gemini-2.5-flash")
     payload = {
         "systemInstruction": {"parts": [{"text": _build_system_instruction(context, analysis)}]},
         "contents": _build_contents(user_text, history),

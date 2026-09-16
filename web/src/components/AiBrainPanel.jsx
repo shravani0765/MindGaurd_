@@ -20,9 +20,10 @@ const EXPLAIN = {
 };
 
 const MODEL_OPTIONS = [
-  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash — fast, recommended' },
-  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash — newer, slightly slower' },
-  { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash — older fallback' },
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash — fast, recommended' },
+  { id: 'gemini-flash-latest', label: 'Gemini Flash (latest) — always current' },
+  { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite — cheapest' },
+  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro — best quality, slower' },
 ];
 
 /**
