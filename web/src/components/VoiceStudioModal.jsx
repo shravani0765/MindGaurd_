@@ -4,6 +4,7 @@ import { Badge, Button, Callout, OptionCard, StatusBanner } from './ui';
 import WarmthSlider from './WarmthSlider';
 import PrivacyPanel from './PrivacyPanel';
 import AiBrainPanel from './AiBrainPanel';
+import ComfortProfilePanel from './ComfortProfilePanel';
 import CrisisResources from './CrisisResources';
 import { crisisRegionFor } from '../services/crisisResources';
 import { aiConfig } from '../services/aiConfig';
@@ -242,6 +243,8 @@ export default function VoiceStudioModal({ isOpen, onClose, onAccountDeleted }) 
               ))}
             </div>
           </section>
+
+          <ComfortProfilePanel />
 
           <PrivacyPanel onAccountDeleted={onAccountDeleted} />
 
