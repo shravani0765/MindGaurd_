@@ -483,7 +483,13 @@ def companion_reply_view(request):
     )
 
     if not text:
-        return Response({"source": "offline", "reason": model_or_reason})
+        payload = {"source": "offline", "reason": model_or_reason}
+        # A 404 means the configured model name is unusable. Return the names
+        # this key can actually call, so the fix is obvious instead of guesswork.
+        if model_or_reason == "http-404":
+            payload["configuredModel"] = getattr(settings, "GEMINI_MODEL", "")
+            payload["availableModels"] = companion.list_available_models()[:12]
+        return Response(payload)
 
     return Response({"source": "gemini", "model": model_or_reason, "reply": text})
 

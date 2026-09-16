@@ -72,6 +72,14 @@ export default function AiBrainPanel() {
 
       if (result?.source === 'gemini') {
         setServerCheck({ tone: 'success', text: `Server is generating replies with ${result.model}.` });
+      } else if (result?.reason === 'http-404' && result.availableModels?.length) {
+        // Name the bad value and the working alternatives, so the fix is exact.
+        setServerCheck({
+          tone: 'error',
+          text:
+            `GEMINI_MODEL is set to "${result.configuredModel}", which this key cannot use. ` +
+            `Change it in Render to one of: ${result.availableModels.join(', ')}`,
+        });
       } else {
         setServerCheck({ tone: 'error', text: EXPLAIN[result?.reason] || `Server replied: ${result?.reason || 'unknown'}` });
       }

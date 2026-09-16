@@ -78,6 +78,35 @@ def is_configured():
     return bool(getattr(settings, "GEMINI_API_KEY", ""))
 
 
+def list_available_models():
+    """Asks Google which models this key can actually call.
+
+    A 404 from generateContent means the configured model name is not available
+    to this key — the name may be wrong, deprecated, or not enabled for the
+    account. Guessing replacements wastes time, so this returns the real list
+    for the diagnostic panel to display.
+    """
+    if not is_configured():
+        return []
+
+    url = f"{ENDPOINT}?key={settings.GEMINI_API_KEY}"
+    try:
+        with urllib.request.urlopen(url, timeout=TIMEOUT_SECONDS) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except Exception as error:  # noqa: BLE001 - diagnostic path, report and move on
+        logger.warning("Could not list Gemini models: %s", error)
+        return []
+
+    names = []
+    for model in data.get("models", []):
+        # Only models that support generateContent are usable here.
+        if "generateContent" not in (model.get("supportedGenerationMethods") or []):
+            continue
+        # API returns "models/gemini-2.0-flash"; the config wants the bare name.
+        names.append(model.get("name", "").removeprefix("models/"))
+    return [n for n in names if n]
+
+
 def _warmth_guidance(tier):
     return {
         "formal": "Speak warmly but properly. No slang.",
