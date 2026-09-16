@@ -1,7 +1,6 @@
 // web/src/components/Header.jsx
 import React, { useState, useEffect } from 'react';
 import {
-  Shield,
   Sparkles,
   Volume2,
   VolumeX,
@@ -17,8 +16,10 @@ import {
   AudioLines,
   Moon,
   Sun,
+  Flower2,
 } from 'lucide-react';
 import { ambianceEngine } from '../services/audioAmbiance';
+import BrandMark from './BrandMark';
 
 export default function Header({
   onOpenDashboard,
@@ -28,6 +29,7 @@ export default function Header({
   onOpenVoiceStudio,
   sanctuaryMode = 'default',
   onToggleSanctuary,
+  onOpenYoga,
   autoInterventionActive: _autoInterventionActive = false,
 }) {
   const [activeTrack, setActiveTrack] = useState(null);
@@ -74,7 +76,7 @@ export default function Header({
     <header className="app-header">
       <div className="app-header__brand">
         <div className="app-header__logo">
-          <Shield size={20} />
+          <BrandMark size={22} />
         </div>
         <div>
           <div className="app-header__brand-row">
@@ -152,6 +154,16 @@ export default function Header({
             )}
           </div>
         )}
+
+        <button
+          type="button"
+          onClick={onOpenYoga}
+          className="btn-ghost app-header__yoga"
+          title="Breathwork and meditation practice"
+        >
+          <Flower2 size={14} />
+          <span>Yoga</span>
+        </button>
 
         <button
           type="button"

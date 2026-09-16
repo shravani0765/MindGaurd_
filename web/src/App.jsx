@@ -12,6 +12,7 @@ import SadhguruMeditationModal from './components/SadhguruMeditationModal';
 import InsightsPanel from './components/InsightsPanel';
 import DashboardHero from './components/DashboardHero';
 import StreakCard from './components/StreakCard';
+import DailyQuote from './components/DailyQuote';
 import RecoveryGuidePanel from './components/RecoveryGuidePanel';
 import AuthScreen from './components/AuthScreen';
 import OnboardingScreen from './components/OnboardingScreen';
@@ -256,6 +257,7 @@ export default function App() {
         onOpenVoiceStudio={() => setIsVoiceStudioOpen(true)}
         sanctuaryMode={sanctuaryMode}
         onToggleSanctuary={() => sanctuaryTheme.toggle()}
+        onOpenYoga={() => setIsMeditationOpen(true)}
       />
 
       {isServerWaking && (
@@ -289,6 +291,8 @@ export default function App() {
           />
 
           <StreakCard moodHistory={moodHistory} />
+
+          <DailyQuote />
 
           <InsightsPanel
             burnoutSnapshot={burnoutSnapshot}
