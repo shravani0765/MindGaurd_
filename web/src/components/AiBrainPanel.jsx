@@ -1,11 +1,24 @@
 import React, { useState } from 'react';
-import { BrainCircuit, CheckCircle2, ExternalLink, XCircle } from 'lucide-react';
+import { BrainCircuit, CheckCircle2, ExternalLink, Stethoscope, XCircle } from 'lucide-react';
 import { Badge, Button, Callout, Field, StatusBanner } from './ui';
 import { aiConfig } from '../services/aiConfig';
 import { resetConversation, testGeminiConnection } from '../services/geminiClient';
+import { apiClient } from '../services/api';
 
 // Kept short on purpose: these are the Gemini models that make sense for a
 // short, conversational, low-latency reply.
+// Server reasons translated into something actionable.
+const EXPLAIN = {
+  'not-configured': 'The server has NO Gemini key. Add GEMINI_API_KEY in Render -> Environment, or paste a key below to use one just on this device.',
+  'crisis-path': 'Safety path active — the model is intentionally bypassed for crisis messages.',
+  'http-400': 'Google rejected the request. The server key is probably malformed.',
+  'http-403': 'Google refused the server key. It may be restricted or revoked.',
+  'http-429': 'Quota exceeded on the server key. Wait, or use a different key.',
+  'http-404': 'That model name is not available for the server key.',
+  blocked: "Gemini's safety filter blocked this prompt.",
+  'request-failed': 'The server could not reach Google. Network or timeout.',
+};
+
 const MODEL_OPTIONS = [
   { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash — fast, recommended' },
   { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash — newer, slightly slower' },
@@ -22,6 +35,8 @@ export default function AiBrainPanel() {
   const [model, setModel] = useState(() => aiConfig.getModel());
   const [result, setResult] = useState(null);
   const [isTesting, setIsTesting] = useState(false);
+  const [serverCheck, setServerCheck] = useState(null);
+  const [isCheckingServer, setIsCheckingServer] = useState(false);
 
   const isConfigured = Boolean(aiConfig.getGeminiKey());
 
@@ -39,6 +54,32 @@ export default function AiBrainPanel() {
     }
     setResult(check);
     setIsTesting(false);
+  };
+
+  /**
+   * Asks the server what it would actually do with a reply request. Surfaces
+   * the raw reason so a misconfiguration is self-diagnosable instead of
+   * looking like bad model output.
+   */
+  const handleServerCheck = async () => {
+    setIsCheckingServer(true);
+    setServerCheck(null);
+    try {
+      const result = await apiClient.generateCompanionReply({
+        text: 'This is a configuration check.',
+        analysis: { emotion: 'neutral' },
+      });
+
+      if (result?.source === 'gemini') {
+        setServerCheck({ tone: 'success', text: `Server is generating replies with ${result.model}.` });
+      } else {
+        setServerCheck({ tone: 'error', text: EXPLAIN[result?.reason] || `Server replied: ${result?.reason || 'unknown'}` });
+      }
+    } catch (error) {
+      setServerCheck({ tone: 'error', text: `Could not reach the server: ${error.message}` });
+    } finally {
+      setIsCheckingServer(false);
+    }
   };
 
   const handleClear = () => {
@@ -73,6 +114,20 @@ export default function AiBrainPanel() {
       {result && (
         <StatusBanner tone={result.success ? 'success' : 'error'}>{result.message}</StatusBanner>
       )}
+
+      <div className="privacy-actions">
+        <Button
+          variant="ghost"
+          icon={Stethoscope}
+          onClick={handleServerCheck}
+          isLoading={isCheckingServer}
+          loadingLabel="Checking..."
+        >
+          Check server setup
+        </Button>
+      </div>
+
+      {serverCheck && <StatusBanner tone={serverCheck.tone}>{serverCheck.text}</StatusBanner>}
 
       <Field
         label="Gemini API key"
