@@ -1,11 +1,10 @@
 // web/src/components/ChatInterface.jsx
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, User, Bot, HeartPulse, ShieldCheck, WifiOff } from 'lucide-react';
-import { Badge } from './ui';
+import { Send, Sparkles, User, Bot, HeartPulse, ShieldCheck } from 'lucide-react';
 import { apiClient } from '../services/api';
 import { buildComfortResponse } from '../services/wellnessIntelligence';
 import { aiConfig } from '../services/aiConfig';
-import { generateReply, isGeminiConfigured, rememberTurn } from '../services/geminiClient';
+import { generateReply, rememberTurn } from '../services/geminiClient';
 
 export default function ChatInterface({ userId = null, onMoodLogged }) {
   const [messages, setMessages] = useState([
@@ -79,7 +78,6 @@ export default function ChatInterface({ userId = null, onMoodLogged }) {
         somaticAdvice: comfort.somaticAdvice,
       });
       const replyText = generated?.text || `${comfort.message} ${comfort.followUp}`.trim();
-      const source = generated ? { kind: 'gemini', model: generated.model } : { kind: 'offline' };
       rememberTurn('assistant', replyText);
 
       setMessages((prev) =>
@@ -92,7 +90,6 @@ export default function ChatInterface({ userId = null, onMoodLogged }) {
           sender: 'ai',
           text: replyText,
           emotion,
-          source,
           timestamp: 'Just now',
         };
         setMessages((prev) => [...prev, aiMsg]);
@@ -140,15 +137,7 @@ export default function ChatInterface({ userId = null, onMoodLogged }) {
                     {message.text}
                   </div>
 
-                  {!isUser && message.source && (
-                    <div className="message-meta">
-                      {message.source.kind === 'gemini' ? (
-                        <Badge tone="positive" icon={Sparkles}>{message.source.model}</Badge>
-                      ) : (
-                        <Badge tone="caution" icon={WifiOff}>Offline reply</Badge>
-                      )}
-                    </div>
-                  )}
+
 
                   {isUser && message.emotion && (
                     <div className="message-meta">
@@ -218,16 +207,9 @@ export default function ChatInterface({ userId = null, onMoodLogged }) {
           </button>
         </form>
 
-        {!isGeminiConfigured() ? (
-          <p className="chat-footnote chat-footnote--warn">
-            Replies are coming from a fixed script, which is why they repeat. Add a free Gemini key
-            in <strong>Voice → Conversation brain</strong> to get real answers.
-          </p>
-        ) : (
-          <p className="chat-footnote">
-            One honest sentence is more useful than a perfect explanation.
-          </p>
-        )}
+        <p className="chat-footnote">
+          One honest sentence is more useful than a perfect explanation.
+        </p>
       </div>
     </div>
   );
