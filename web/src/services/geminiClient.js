@@ -15,6 +15,7 @@
 //      outcomes, and is given a hard length limit.
 
 import { aiConfig } from './aiConfig';
+import { apiClient } from './api';
 import { getArchetype, getRegion } from './archetypes';
 import { getLanguage, tierForLevel } from './vernacular';
 
@@ -47,8 +48,32 @@ export function resetConversation() {
   history.length = 0;
 }
 
+/**
+ * Whether *some* generation path is available.
+ *
+ * The backend key cannot be detected from here without a request, so this is
+ * optimistic: it reports true unless the server has told us it is offline. The
+ * reply badge shows what actually happened for each turn.
+ */
+let backendAvailable = true;
+
 export function isGeminiConfigured() {
-  return Boolean(aiConfig.getGeminiKey());
+  return backendAvailable || Boolean(aiConfig.getGeminiKey());
+}
+
+/** Persona context the server needs to write in the user's own register. */
+function buildContext() {
+  const { archetypeId, regionId, languageId, slangLevel } = aiConfig.getCompanionProfile();
+  const archetype = getArchetype(archetypeId);
+
+  return {
+    archetypeLabel: archetype.label,
+    archetypeSummary: archetype.summary,
+    archetypeTone: archetype.promptModifier,
+    regionLabel: getRegion(regionId).label,
+    languageLabel: getLanguage(languageId).label,
+    warmthTier: tierForLevel(slangLevel),
+  };
 }
 
 /**
@@ -116,9 +141,30 @@ export async function generateReply({
 }) {
   // (1) Safety contract: crisis turns never reach the model.
   if (urgency === 'high' || topicFlags.selfHarm) return null;
+  if (!userText?.trim()) return null;
 
+  // (2) Preferred path: the server holds the key.
+  try {
+    const result = await apiClient.generateCompanionReply({
+      text: userText.trim(),
+      context: buildContext(),
+      analysis: { emotion, urgency, topicFlags },
+      history: history.slice(-8),
+    });
+
+    if (result?.source === 'gemini' && result.reply) {
+      backendAvailable = true;
+      return { text: sanitizeReply(result.reply, somaticAdvice), model: result.model };
+    }
+    // 'not-configured' means no server key; anything else is transient.
+    if (result?.reason === 'not-configured') backendAvailable = false;
+  } catch (error) {
+    console.warn('Companion endpoint failed, trying local key:', error);
+  }
+
+  // (3) Local-key fallback, for development without a backend.
   const key = aiConfig.getGeminiKey();
-  if (!key || !userText?.trim()) return null;
+  if (!key) return null;
 
   const model = aiConfig.getModel();
   const controller = new AbortController();

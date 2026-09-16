@@ -241,6 +241,24 @@ export const apiClient = {
     return Array.isArray(data) ? data.map(normalizeMoodLog) : [];
   },
 
+  /**
+   * Asks the backend to generate a companion reply. The Gemini key lives on the
+   * server, so the browser never holds it.
+   *
+   * Resolves to `{source:'offline'}` rather than throwing when generation is
+   * unavailable, so the caller can use its written responses instead.
+   */
+  async generateCompanionReply(payload) {
+    return requestJson(
+      '/companion/reply',
+      { method: 'POST', body: JSON.stringify(payload) },
+      (error) => {
+        console.warn('Companion reply unavailable, using local responses:', error);
+        return { source: 'offline', reason: 'request-failed' };
+      }
+    );
+  },
+
   async exportAccountData() {
     return requestJson('/account/export');
   },

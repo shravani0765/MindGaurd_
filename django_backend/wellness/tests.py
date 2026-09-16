@@ -1,3 +1,4 @@
+import json
 from smtplib import SMTPAuthenticationError
 from unittest import mock
 
@@ -758,3 +759,114 @@ class AccountDataRightsTests(TestCase):
             "/api/account/delete", {"password": "strongpass123"}, format="json"
         )
         self.assertEqual(response.status_code, 401)
+
+
+@override_settings(DEBUG=True, DEMO_AUTO_VERIFY=True, OPENAI_API_KEY="")
+class CompanionReplyTests(TestCase):
+    """Server-side reply generation, including the safety contract."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.post(
+            "/api/auth/register",
+            {
+                "firstName": "Reply",
+                "lastName": "Tester",
+                "email": "reply@example.com",
+                "password": "strongpass123",
+                "passwordConfirm": "strongpass123",
+                "agreeToTerms": True,
+            },
+            format="json",
+        )
+        token = self.client.post(
+            "/api/auth/login",
+            {"email": "reply@example.com", "password": "strongpass123"},
+            format="json",
+        ).json()["authToken"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    def test_requires_authentication(self):
+        anonymous = APIClient()
+        response = anonymous.post("/api/companion/reply", {"text": "hello"}, format="json")
+        self.assertEqual(response.status_code, 401)
+
+    def test_rejects_blank_text(self):
+        response = self.client.post("/api/companion/reply", {"text": "   "}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    @override_settings(GEMINI_API_KEY="")
+    def test_reports_offline_when_no_key_configured(self):
+        response = self.client.post("/api/companion/reply", {"text": "i feel low"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["source"], "offline")
+        self.assertEqual(response.json()["reason"], "not-configured")
+
+    @override_settings(GEMINI_API_KEY="fake-key-should-never-be-used")
+    @mock.patch("wellness.companion.urllib.request.urlopen")
+    def test_crisis_turn_never_reaches_the_model(self, mocked_urlopen):
+        """The safety contract, enforced server-side as well as in the client."""
+        for payload in (
+            {"text": "i want to end it all", "analysis": {"urgency": "high"}},
+            {"text": "i want to hurt myself", "analysis": {"topicFlags": {"selfHarm": True}}},
+        ):
+            with self.subTest(payload=payload):
+                response = self.client.post("/api/companion/reply", payload, format="json")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["source"], "offline")
+                self.assertEqual(response.json()["reason"], "crisis-path")
+
+        mocked_urlopen.assert_not_called()
+
+    @override_settings(GEMINI_API_KEY="fake-key")
+    @mock.patch("wellness.companion.urllib.request.urlopen")
+    def test_normal_turn_calls_the_model_and_returns_the_reply(self, mocked_urlopen):
+        body = json.dumps(
+            {"candidates": [{"content": {"parts": [{"text": "Of course you cannot, not yet."}]}, "finishReason": "STOP"}]}
+        ).encode()
+        mocked_urlopen.return_value.__enter__.return_value.read.return_value = body
+
+        response = self.client.post(
+            "/api/companion/reply",
+            {"text": "my girlfriend left me", "analysis": {"emotion": "sad", "topicFlags": {"heartbreak": True}}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["source"], "gemini")
+        self.assertIn("Of course you cannot", response.json()["reply"])
+        mocked_urlopen.assert_called_once()
+
+    @override_settings(GEMINI_API_KEY="fake-key")
+    @mock.patch("wellness.companion.urllib.request.urlopen", side_effect=OSError("network down"))
+    def test_network_failure_degrades_to_offline(self, _mocked):
+        response = self.client.post("/api/companion/reply", {"text": "hi"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["source"], "offline")
+
+    def test_heartbreak_is_detected_as_a_topic(self):
+        response = self.client.post(
+            "/api/interactions/text",
+            {"text": "my girlfriend left me and my love failed, i cannot move on"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        details = response.json()["moodLog"]["details"]
+        self.assertTrue(details["topicFlags"]["heartbreak"])
+        self.assertEqual(details["supportStyle"], "connection")
+        self.assertEqual(response.json()["moodLog"]["emotion"], "sad")
+
+    def test_heavy_topics_get_a_longer_reply_budget(self):
+        from .companion import _build_system_instruction
+
+        heavy = _build_system_instruction({}, {"emotion": "sad", "topicFlags": {"heartbreak": True}})
+        light = _build_system_instruction({}, {"emotion": "calm", "topicFlags": {}})
+        self.assertIn("4 to 7 sentences", heavy)
+        self.assertIn("2 to 4 sentences", light)
+
+    def test_prompt_forbids_the_scripted_openers(self):
+        from .companion import _build_system_instruction
+
+        prompt = _build_system_instruction({}, {"emotion": "sad", "topicFlags": {}})
+        self.assertIn("I'm sorry to hear that", prompt)
+        self.assertIn("Do not just validate and stop", prompt)
+        self.assertIn("never pretend", prompt.lower())

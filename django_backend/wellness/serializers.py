@@ -61,6 +61,34 @@ class TextInteractionSerializer(serializers.Serializer):
     text = serializers.CharField(max_length=5000, allow_blank=False, trim_whitespace=True)
 
 
+class CompanionReplySerializer(serializers.Serializer):
+    """Validates a reply request. `context` and `analysis` are client-supplied
+    and therefore untrusted — they only shape wording, never authorisation."""
+
+    text = serializers.CharField(max_length=4000, trim_whitespace=True)
+    context = serializers.JSONField(required=False)
+    analysis = serializers.JSONField(required=False)
+    history = serializers.JSONField(required=False)
+
+    def validate_history(self, value):
+        if not value:
+            return []
+        if not isinstance(value, list):
+            raise serializers.ValidationError("history must be a list.")
+        # Cap the window so a client cannot drive up token cost arbitrarily.
+        return [
+            {"role": str(turn.get("role", "user"))[:16], "text": str(turn.get("text", ""))[:1000]}
+            for turn in value[-8:]
+            if isinstance(turn, dict)
+        ]
+
+    def validate_context(self, value):
+        return value if isinstance(value, dict) else {}
+
+    def validate_analysis(self, value):
+        return value if isinstance(value, dict) else {}
+
+
 class VoiceInteractionSerializer(serializers.Serializer):
     """A voice check-in needs at least one channel carrying real information."""
 

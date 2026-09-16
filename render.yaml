@@ -91,6 +91,16 @@ services:
       - key: DEMO_AUTO_VERIFY
         value: false
 
+      # --- Gemini (companion replies) --------------------------------------
+      # This is what makes replies feel written for the user instead of
+      # scripted. Deliberately server-side: a VITE_ variable would be inlined
+      # into the JS bundle and readable by anyone with DevTools.
+      # Get one free at https://aistudio.google.com/apikey
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+
       # Optional. Without it, text analysis uses the heuristic path.
       - key: OPENAI_API_KEY
         sync: false

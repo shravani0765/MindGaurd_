@@ -123,6 +123,12 @@ OPENAI_BASE_URL = env_str("OPENAI_BASE_URL", "")
 OPENAI_MODEL = env_str("OPENAI_MODEL", "gpt-5-mini")
 OPENAI_TIMEOUT_SECONDS = env_int("OPENAI_TIMEOUT_SECONDS", 12)
 
+# Gemini powers the companion's conversational replies. The key stays here,
+# server-side: a VITE_ variable would be inlined into the JS bundle and
+# readable by anyone with DevTools, which means anyone could spend the quota.
+GEMINI_API_KEY = env_str("GEMINI_API_KEY", "")
+GEMINI_MODEL = env_str("GEMINI_MODEL", "gemini-2.0-flash")
+
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in env_str(

@@ -92,6 +92,12 @@ TOPIC_FLAGS = {
     "grounding": ("breathe", "breathing", "panic", "racing thoughts", "calm me down"),
     "celebration": ("proud", "milestone", "happy", "grateful", "achieved"),
     "loneliness": ("alone", "lonely", "isolated", "disconnected"),
+    "heartbreak": (
+        "breakup", "broke up", "break up", "ex ", "dumped", "left me", "cheated",
+        "love failed", "love failure", "she left", "he left", "divorce", "rejected me",
+        "heartbreak", "heart broken", "broken heart", "move on from her", "move on from him",
+    ),
+    "grief": ("passed away", "died", "death of", "lost my", "funeral", "no longer with us"),
     "selfHarm": ("hurt myself", "kill myself", "end it all", "want to disappear", "not worth living"),
 }
 
@@ -507,6 +513,10 @@ def _analyze_text_heuristics(text):
         scores["happy"] += 0.8
     if topic_flags["loneliness"]:
         scores["sad"] += 0.9
+    if topic_flags["heartbreak"]:
+        scores["sad"] += 1.8
+    if topic_flags["grief"]:
+        scores["sad"] += 2.0
     if topic_flags["selfHarm"]:
         scores["stressed"] += 2.6
 
@@ -653,6 +663,8 @@ def _pick_support_style(emotion, topic_flags):
         return "recovery"
     if topic_flags.get("celebration") or emotion in {"happy", "calm"}:
         return "reinforcement"
+    if topic_flags.get("heartbreak") or topic_flags.get("grief"):
+        return "connection"
     if topic_flags.get("loneliness") or emotion == "sad":
         return "connection"
     return "reflection"

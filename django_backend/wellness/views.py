@@ -11,6 +11,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .models import MindGuardUser, MoodLog
+from . import companion
 from .serializers import (
     AuthLoginSerializer,
     AuthRegisterSerializer,
@@ -19,6 +20,7 @@ from .serializers import (
     NotificationSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
+    CompanionReplySerializer,
     TextInteractionSerializer,
     TokenRegistrationSerializer,
     VideoInteractionSerializer,
@@ -451,6 +453,39 @@ def burnout_risk_view(request):
 
     snapshot = format_burnout_snapshot(get_user_logs(user_id))
     return Response(snapshot)
+
+
+@api_view(["POST"])
+def companion_reply_view(request):
+    """Generates the companion's spoken reply.
+
+    The browser sends what the user said plus its local persona context
+    (archetype, language, warmth) because those live in localStorage and never
+    touch the database. The API key stays server-side.
+
+    Returns `source: "offline"` rather than an error when generation is
+    unavailable, so the client can fall back to its written responses without
+    treating it as a failure.
+    """
+    serializer = CompanionReplySerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    _, _, auth_error = _resolve_actor(request, require_auth=True)
+    if auth_error:
+        return auth_error
+
+    data = serializer.validated_data
+    text, model_or_reason = companion.generate_reply(
+        user_text=data["text"],
+        context=data.get("context") or {},
+        analysis=data.get("analysis") or {},
+        history=data.get("history") or [],
+    )
+
+    if not text:
+        return Response({"source": "offline", "reason": model_or_reason})
+
+    return Response({"source": "gemini", "model": model_or_reason, "reply": text})
 
 
 @api_view(["GET"])

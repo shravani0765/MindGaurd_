@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     burnout_risk_view,
+    companion_reply_view,
     delete_account_view,
     export_account_view,
     health_view,
@@ -28,6 +29,7 @@ urlpatterns = [
     path("auth/login", login_view, name="auth-login"),
     path("auth/logout", logout_view, name="auth-logout"),
     path("auth/me", me_view, name="auth-me"),
+    path("companion/reply", companion_reply_view, name="companion-reply"),
     path("account/export", export_account_view, name="account-export"),
     path("account/delete", delete_account_view, name="account-delete"),
     path("auth/verify", verify_view, name="auth-verify"),
