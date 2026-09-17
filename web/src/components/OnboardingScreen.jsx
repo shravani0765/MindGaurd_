@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Sparkles, Volume2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ShieldCheck, Sparkles, Volume2 } from 'lucide-react';
 import { Button, Callout, Field, OptionCard } from './ui';
 import WarmthSlider from './WarmthSlider';
 import { aiConfig } from '../services/aiConfig';
@@ -17,35 +17,42 @@ import { ambianceEngine } from '../services/audioAmbiance';
 
 const STEPS = [
   {
+    id: 'name',
+    eyebrow: 'Step 1 of 6',
+    title: 'What should I call you?',
+    description:
+      'This is only used when it makes a reply feel more personal. It does not have to be your real name — a nickname or anything you like is completely fine.',
+  },
+  {
     id: 'archetype',
-    eyebrow: 'Step 1 of 5',
+    eyebrow: 'Step 2 of 6',
     title: 'Which of these sounds most like you right now?',
     description:
       'This only changes how the companion talks to you — how much it reassures, and what it asks next. You can change it any time.',
   },
   {
     id: 'region',
-    eyebrow: 'Step 2 of 5',
+    eyebrow: 'Step 3 of 6',
     title: 'Which English feels most natural to read and hear?',
     description: 'Grounding prompts will use everyday phrasing from that region rather than a translated version.',
   },
   {
     id: 'voice',
-    eyebrow: 'Step 3 of 5',
+    eyebrow: 'Step 4 of 6',
     title: 'Pick the voice that feels easiest to listen to.',
     description:
       'Voices run on-device. The first reply downloads the model once, then everything stays local and offline.',
   },
   {
     id: 'language',
-    eyebrow: 'Step 4 of 5',
+    eyebrow: 'Step 5 of 6',
     title: 'How should your companion talk — formal, or like home?',
     description:
       'Pick the language you think in, then slide towards however familiar you want it to sound. You can move this any time.',
   },
   {
     id: 'comfort',
-    eyebrow: 'Step 5 of 5',
+    eyebrow: 'Step 6 of 6',
     title: 'What comforts you when a day goes badly?',
     description:
       'When MindGuard notices you are struggling, it will dim the room and bring these in quietly. All of it stays on this device.',
@@ -69,6 +76,7 @@ export default function OnboardingScreen({ userName, onComplete }) {
   const [comfort, setComfort] = useState(() => loadComfortProfile());
   const [trackError, setTrackError] = useState('');
   const [auditioningScape, setAuditioningScape] = useState(null);
+  const [preferredName, setPreferredName] = useState(() => aiConfig.getPreferredName() || userName || '');
 
   const step = STEPS[stepIndex];
   const isLastStep = stepIndex === STEPS.length - 1;
@@ -80,7 +88,7 @@ export default function OnboardingScreen({ userName, onComplete }) {
     setPreviewingId(id);
     const persona = VOICE_PERSONAS[id];
     speechService.speak(
-      `Hello ${userName || 'there'}. ${persona.blurb} Whenever you are ready, we can start with one slow breath.`,
+      `Hello ${preferredName || userName || 'there'}. ${persona.blurb} Whenever you are ready, we can start with one slow breath.`,
       () => setPreviewingId(null),
       { personaId: id, emotion: 'calm' }
     );
@@ -95,8 +103,8 @@ export default function OnboardingScreen({ userName, onComplete }) {
     const cleanComfort = { ...comfort, comfortTrackUrl: check.valid ? check.url : '' };
 
     saveComfortProfile(cleanComfort);
-    aiConfig.completeOnboarding({ archetypeId, regionId, personaId, languageId, slangLevel });
-    onComplete({ archetypeId, regionId, personaId, languageId, slangLevel, comfort: cleanComfort });
+    aiConfig.completeOnboarding({ archetypeId, regionId, personaId, languageId, slangLevel, preferredName });
+    onComplete({ archetypeId, regionId, personaId, languageId, slangLevel, preferredName, comfort: cleanComfort });
   };
 
   const handleNext = () => {
@@ -148,6 +156,30 @@ export default function OnboardingScreen({ userName, onComplete }) {
         </div>
 
         <div className="onboarding-card__body">
+          {step.id === 'name' && (
+            <>
+              <Field
+                label="Your name or nickname"
+                placeholder="Shru, Ammu, Blue, anything you like..."
+                autoFocus
+                maxLength={40}
+                value={preferredName}
+                onChange={(event) => setPreferredName(event.target.value)}
+              />
+
+              <Callout tone="info" icon={ShieldCheck} title="Use any name you want">
+                <p>
+                  A nickname is genuinely fine — many people prefer one here. Your real name is
+                  never needed for the companion to work.
+                </p>
+                <p>
+                  This is saved only in this browser, separately from your account, so it is not
+                  stored next to the email you signed up with.
+                </p>
+              </Callout>
+            </>
+          )}
+
           {step.id === 'archetype' && (
             <div className="ui-option-grid">
               {Object.values(ARCHETYPES).map((archetype) => (

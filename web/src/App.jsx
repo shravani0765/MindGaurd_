@@ -50,6 +50,8 @@ export default function App() {
   const [isMeditationOpen, setIsMeditationOpen] = useState(false);
   const [isVoiceStudioOpen, setIsVoiceStudioOpen] = useState(false);
   const [isOnboarded, setIsOnboarded] = useState(() => aiConfig.isOnboarded());
+  // What the user asked to be called. Held locally, never on the account.
+  const [preferredName, setPreferredName] = useState(() => aiConfig.getPreferredName());
   const [interventionToast, setInterventionToast] = useState(null);
   const [sanctuaryMode, setSanctuaryMode] = useState('default');
   const [isServerWaking, setIsServerWaking] = useState(false);
@@ -242,7 +244,10 @@ export default function App() {
     return (
       <OnboardingScreen
         userName={session.user?.firstName || session.user?.name}
-        onComplete={() => setIsOnboarded(true)}
+        onComplete={({ preferredName: chosen }) => {
+          setPreferredName(chosen || '');
+          setIsOnboarded(true);
+        }}
       />
     );
   }
@@ -252,7 +257,7 @@ export default function App() {
       <Header
         burnoutScore={burnoutScore}
         onOpenDashboard={() => setIsDashboardOpen(true)}
-        userName={session.user?.firstName || session.user?.name}
+        userName={preferredName || session.user?.firstName || session.user?.name}
         onLogout={handleLogout}
         onOpenVoiceStudio={() => setIsVoiceStudioOpen(true)}
         sanctuaryMode={sanctuaryMode}

@@ -137,7 +137,10 @@ def _build_system_instruction(context, analysis):
     if active_topics:
         lines.append(f"- Detected themes: {', '.join(active_topics)}.")
     if context.get("userName"):
-        lines.append(f"- Their name is {context['userName']}. Use it at most once, only if it lands naturally.")
+        lines.append(
+            f"- They asked to be called {context['userName']}. This may be a chosen name rather "
+            "than a legal one; use it sparingly, at most once, and only where it lands naturally."
+        )
 
     lines += [
         "",

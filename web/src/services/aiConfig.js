@@ -49,6 +49,7 @@ const STORAGE_KEYS = {
   ONBOARDED: 'mindguard_onboarding_complete',
   LANGUAGE: 'mindguard_vernacular_language',
   SLANG_LEVEL: 'mindguard_slang_level',
+  PREFERRED_NAME: 'mindguard_preferred_name',
 };
 
 class AIConfigService {
@@ -173,6 +174,29 @@ class AIConfigService {
     this.notify();
   }
 
+  /**
+   * What the companion should call the user.
+   *
+   * Held in localStorage rather than on the account, deliberately: it is
+   * chosen precisely so it need not be a real name, so it should not be
+   * stored next to the email address that identifies them.
+   */
+  getPreferredName() {
+    if (typeof window === 'undefined') return '';
+    return (localStorage.getItem(STORAGE_KEYS.PREFERRED_NAME) || '').trim();
+  }
+
+  setPreferredName(name) {
+    if (typeof window === 'undefined') return;
+    const clean = (name || '').trim().slice(0, 40);
+    if (clean) {
+      localStorage.setItem(STORAGE_KEYS.PREFERRED_NAME, clean);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.PREFERRED_NAME);
+    }
+    this.notify();
+  }
+
   getLanguage() {
     if (typeof window === 'undefined') return DEFAULT_LANGUAGE_ID;
     const stored = localStorage.getItem(STORAGE_KEYS.LANGUAGE);
@@ -207,6 +231,7 @@ class AIConfigService {
       engine: this.getTtsEngine(),
       languageId: this.getLanguage(),
       slangLevel: this.getSlangLevel(),
+      preferredName: this.getPreferredName(),
     };
   }
 
@@ -215,8 +240,9 @@ class AIConfigService {
     return localStorage.getItem(STORAGE_KEYS.ONBOARDED) === 'true';
   }
 
-  completeOnboarding({ archetypeId, regionId, personaId, languageId, slangLevel } = {}) {
+  completeOnboarding({ archetypeId, regionId, personaId, languageId, slangLevel, preferredName } = {}) {
     if (typeof window === 'undefined') return;
+    if (preferredName !== undefined) this.setPreferredName(preferredName);
     if (archetypeId) this.setArchetype(archetypeId);
     if (regionId) this.setRegion(regionId);
     if (personaId) this.setVoicePersona(personaId);

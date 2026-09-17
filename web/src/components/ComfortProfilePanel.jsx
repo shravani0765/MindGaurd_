@@ -8,6 +8,7 @@ import {
   validateComfortTrackUrl,
 } from '../services/comfortProfile';
 import { ambianceEngine } from '../services/audioAmbiance';
+import { aiConfig } from '../services/aiConfig';
 
 /**
  * Edits the comfort profile after onboarding.
@@ -21,6 +22,7 @@ export default function ComfortProfilePanel() {
   const [auditioning, setAuditioning] = useState(null);
   const [status, setStatus] = useState(null);
   const [trackError, setTrackError] = useState('');
+  const [preferredName, setPreferredName] = useState(() => aiConfig.getPreferredName());
 
   // Never leave an audition playing when the panel closes.
   useEffect(() => () => ambianceEngine.stop(), []);
@@ -50,13 +52,14 @@ export default function ComfortProfilePanel() {
     setTrackError('');
     const clean = { ...profile, comfortTrackUrl: check.url };
     saveComfortProfile(clean);
+    aiConfig.setPreferredName(preferredName);
     setProfile(clean);
     setStatus({ tone: 'success', text: 'Saved. MindGuard will use these the next time it notices strain.' });
   };
 
   return (
     <section className="voice-studio__section">
-      <h3>Your comfort profile</h3>
+      <h3>Name &amp; comfort profile</h3>
 
       {status && <StatusBanner tone={status.tone}>{status.text}</StatusBanner>}
 
@@ -64,6 +67,18 @@ export default function ComfortProfilePanel() {
         These play automatically when MindGuard detects strain. Everything here stays in this
         browser and is never uploaded.
       </Callout>
+
+      <Field
+        label="What MindGuard calls you"
+        placeholder="A nickname is fine"
+        maxLength={40}
+        hint="Does not have to be your real name. Saved only in this browser, not on your account."
+        value={preferredName}
+        onChange={(event) => {
+          setPreferredName(event.target.value);
+          setStatus(null);
+        }}
+      />
 
       <fieldset className="onboarding-fieldset">
         <legend>Soundscape</legend>
@@ -126,7 +141,7 @@ export default function ComfortProfilePanel() {
       />
 
       <div className="privacy-actions">
-        <Button onClick={handleSave}>Save comfort profile</Button>
+        <Button onClick={handleSave}>Save preferences</Button>
       </div>
     </section>
   );

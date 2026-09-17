@@ -63,7 +63,7 @@ export function isGeminiConfigured() {
 
 /** Persona context the server needs to write in the user's own register. */
 function buildContext() {
-  const { archetypeId, regionId, languageId, slangLevel } = aiConfig.getCompanionProfile();
+  const { archetypeId, regionId, languageId, slangLevel, preferredName } = aiConfig.getCompanionProfile();
   const archetype = getArchetype(archetypeId);
 
   return {
@@ -73,6 +73,7 @@ function buildContext() {
     regionLabel: getRegion(regionId).label,
     languageLabel: getLanguage(languageId).label,
     warmthTier: tierForLevel(slangLevel),
+    userName: preferredName,
   };
 }
 
@@ -81,7 +82,7 @@ function buildContext() {
  * this user, and what it must not do.
  */
 function buildSystemInstruction({ emotion, topicFlags }) {
-  const { archetypeId, regionId, languageId, slangLevel } = aiConfig.getCompanionProfile();
+  const { archetypeId, regionId, languageId, slangLevel, preferredName } = aiConfig.getCompanionProfile();
   const archetype = getArchetype(archetypeId);
   const region = getRegion(regionId);
   const language = getLanguage(languageId);
@@ -101,6 +102,9 @@ function buildSystemInstruction({ emotion, topicFlags }) {
     `- Archetype: ${archetype.label}. ${archetype.summary}`,
     `- Tone required: ${archetype.promptModifier}`,
     `- Their pace: ${archetype.pacing}`,
+    preferredName
+      ? `- They asked to be called ${preferredName}. It may not be their real name; use it sparingly, at most once, and only where it lands naturally.`
+      : '',
     '',
     'HOW TO SOUND:',
     `- Write in ${language.label}, in Latin script only. ${tierGuidance}`,
