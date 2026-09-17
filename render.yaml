@@ -85,11 +85,15 @@ services:
       - key: DEFAULT_FROM_EMAIL
         sync: false
 
-      # Set true in the dashboard to let accounts log in without email
-      # verification. Demo only: it lets anyone register an address they do
-      # not control.
+      # Accounts are usable without email verification.
+      #
+      # Set here rather than in the dashboard: a blueprint sync overwrites
+      # dashboard edits, and this value was silently reverted twice that way.
+      #
+      # TRADE-OFF: while true, anyone can register an address they do not
+      # control. Acceptable for a demo deployment; set false once SMTP works.
       - key: DEMO_AUTO_VERIFY
-        value: false
+        value: true
 
       # --- Gemini (companion replies) --------------------------------------
       # This is what makes replies feel written for the user instead of

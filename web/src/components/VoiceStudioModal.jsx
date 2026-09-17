@@ -5,6 +5,7 @@ import WarmthSlider from './WarmthSlider';
 import PrivacyPanel from './PrivacyPanel';
 import AiBrainPanel from './AiBrainPanel';
 import ComfortProfilePanel from './ComfortProfilePanel';
+import { isDevMode } from '../services/devMode';
 import CrisisResources from './CrisisResources';
 import { crisisRegionFor } from '../services/crisisResources';
 import { aiConfig } from '../services/aiConfig';
@@ -129,11 +130,11 @@ export default function VoiceStudioModal({ isOpen, onClose, onAccountDeleted }) 
         </header>
 
         <div className="voice-studio__body">
-          <AiBrainPanel />
+          {isDevMode() && <AiBrainPanel />}
 
           <section className="voice-studio__section">
             <h3>Audio engine</h3>
-            <EngineStatus state={engineState} engine={engine} />
+            {isDevMode() && <EngineStatus state={engineState} engine={engine} />}
             <div className="ui-option-grid ui-option-grid--two">
               {ENGINE_OPTIONS.map((option) => (
                 <OptionCard
