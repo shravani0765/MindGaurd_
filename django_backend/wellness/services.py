@@ -363,8 +363,40 @@ def get_user_logs(user_id):
     return MoodLog.objects.filter(client_user_id=str(user_id)).order_by("-timestamp")
 
 
+RECENT_WINDOW = 10
+PRIOR_WINDOW = 10
+
+
+def _weighted_window(entries):
+    """Weighted mean burden over one window, plus the weighted label tally.
+
+    Recency is indexed from the start of the window, so the same weighting
+    scheme applies to the recent and prior windows and the two means stay
+    directly comparable.
+    """
+    weighted_scores = []
+    weighted_counter = Counter()
+    for index, item in enumerate(entries):
+        recency_weight = 1 / (1 + (index * 0.38))
+        confidence_weight = (
+            float(item.details.get("confidence", 0.8))
+            if isinstance(item.details, dict)
+            else 0.8
+        )
+        mode_weight = MODE_WEIGHTS.get(item.source_mode, 1.0)
+        weight = recency_weight * max(confidence_weight, 0.45) * mode_weight
+        weighted_scores.append((EMOTION_SCORES.get(item.emotion, 0.42), weight))
+        weighted_counter[item.emotion] += weight
+
+    total_weight = sum(weight for _, weight in weighted_scores)
+    if not total_weight:
+        return None, weighted_counter
+    mean = sum(score * weight for score, weight in weighted_scores) / total_weight
+    return mean, weighted_counter
+
+
 def format_burnout_snapshot(log_queryset):
-    logs = list(log_queryset[:14])
+    logs = list(log_queryset[: RECENT_WINDOW + PRIOR_WINDOW])
     if not logs:
         return {
             "burnoutRisk": 24,
@@ -376,18 +408,8 @@ def format_burnout_snapshot(log_queryset):
             "recommendedCadence": "Two gentle check-ins across the day",
         }
 
-    recent = logs[:10]
-    weighted_scores = []
-    weighted_counter = Counter()
-    for index, item in enumerate(recent):
-        recency_weight = 1 / (1 + (index * 0.38))
-        confidence_weight = float(item.details.get("confidence", 0.8)) if isinstance(item.details, dict) else 0.8
-        mode_weight = MODE_WEIGHTS.get(item.source_mode, 1.0)
-        weight = recency_weight * max(confidence_weight, 0.45) * mode_weight
-        weighted_scores.append((EMOTION_SCORES.get(item.emotion, 0.42), weight))
-        weighted_counter[item.emotion] += weight
-
-    average = sum(score * weight for score, weight in weighted_scores) / sum(weight for _, weight in weighted_scores)
+    recent = logs[:RECENT_WINDOW]
+    average, weighted_counter = _weighted_window(recent)
     burnout_risk = round(average * 100)
 
     if burnout_risk >= 70:
@@ -400,12 +422,12 @@ def format_burnout_snapshot(log_queryset):
         level = "Low"
         status = "Healthy equilibrium"
 
-    prior_window = logs[5:14]
-    prior_average = (
-        sum(EMOTION_SCORES.get(item.emotion, 0.42) for item in prior_window) / len(prior_window)
-        if prior_window
-        else average
-    )
+    # Disjoint from `recent`, and weighted the same way, so the comparison below
+    # is between two commensurable quantities.
+    prior_window = logs[RECENT_WINDOW : RECENT_WINDOW + PRIOR_WINDOW]
+    prior_average, _ = _weighted_window(prior_window)
+    if prior_average is None:
+        prior_average = average
 
     delta = average - prior_average
     if delta > 0.08:

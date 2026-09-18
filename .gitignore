@@ -37,3 +37,11 @@ django_backend/staticfiles/
 # macOS / cloud-sync conflict copies ("App 2.jsx", "views 2.py").
 # These are duplicates of real source files and must never be committed.
 * [0-9].*
+
+# Paper build artefacts
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.bbl
+paper/*.blg
+paper/*.synctex.gz
