@@ -37,6 +37,31 @@ this should clear the minimum comfortably. Check the compiled page count.
 - [ ] Keep the submission acknowledgement email — that is your proof of
       "submitted" for the 28 September marks deadline
 
+## Plagiarism and AI disclosure
+
+Text-overlap risk was measured, not assumed. Using 8-gram shingle comparison
+against every project document and the submitted Phase I report:
+
+| Compared against | Overlap |
+|---|---|
+| REPORT.md | 0.10% |
+| RESEARCH.md, METHODS.md, README.md | 0.00% |
+| Phase I report (.docx) | 0.90% |
+
+Every overlapping passage is a citation title appearing in both bibliographies
+(the Woebot and Wysa papers). Turnitin excludes bibliographies by default, so
+the effective overlap is zero. The prose is original.
+
+**AI use is disclosed in the manuscript.** Springer Nature requires that LLM
+use be declared with the tool name, how it was used, and which sections; only
+copy-editing is exempt. A "Use of Generative AI" statement appears before the
+Disclosure of Interests. Do not remove it -- undisclosed AI use is a retraction
+risk, and the declaration does not disqualify the paper.
+
+Tell your project guide before submitting. Some institutions have their own
+rules about AI assistance in student work, and that conversation is much better
+had beforehand.
+
 ## Do not
 
 - Submit this paper anywhere else while it is under review at ICIDA.
